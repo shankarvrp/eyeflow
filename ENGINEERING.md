@@ -40,7 +40,7 @@ Only create layers that have behavior. Avoid generic repositories, service wrapp
 
 ## Security baseline
 
-Better Auth is the authentication foundation. Its adapter and route wiring will be composed in the web server when the auth schema lands. Authentication is not authorization: every server mutation must check a typed permission. Secrets are injected at runtime, never bundled into the client.
+Better Auth is the authentication foundation. The web server owns the Drizzle adapter and `/api/auth/*` route. Authentication is not authorization: every private server function requires a session and a typed permission, while department-scoped mutations also check `user_department_access`. Secrets are injected at runtime, never bundled into the client.
 
 Patient and payment mutations will require an append-only audit event. Logs must avoid patient names, payment details, tokens, and raw request bodies.
 

@@ -17,7 +17,7 @@ import {
   Smartphone,
   Users,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "../components/app-shell";
 import { formatCurrency } from "../features/dashboard/dashboard-data";
 import { AddCollectionDialog } from "../features/revenue/add-collection-dialog";
@@ -32,14 +32,17 @@ export const Route = createFileRoute("/")({
 function Dashboard() {
   const loaderData = Route.useLoaderData();
   const [addCollectionOpen, setAddCollectionOpen] = useState(false);
-  const [summary, setSummary] = useState(loaderData.summary);
-  const [departments, setDepartments] = useState(loaderData.departments);
-  const [collections, setCollections] = useState(loaderData.recentCollections);
+  const [ready, setReady] = useState(false);
+  const [summary, setSummary] = useState(loaderData.dashboard.summary);
+  const [departments, setDepartments] = useState(loaderData.dashboard.departments);
+  const [collections, setCollections] = useState(loaderData.dashboard.recentCollections);
   const todayLabel = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "long",
     weekday: "long",
   }).format(new Date());
+
+  useEffect(() => setReady(true), []);
 
   const headlineMetrics = [
     { label: "Cash", amount: summary.cash, icon: Banknote, accent: "emerald" },
@@ -56,7 +59,7 @@ function Dashboard() {
   };
 
   return (
-    <AppShell>
+    <AppShell user={loaderData.session.user}>
       <section className="animate-in">
         <div className="mb-8 flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
           <div>
@@ -76,7 +79,7 @@ function Dashboard() {
               <Download size={16} />
               Export report
             </Button>
-            <Button onClick={() => setAddCollectionOpen(true)}>
+            <Button disabled={!ready} onClick={() => setAddCollectionOpen(true)}>
               <Plus size={17} />
               Add collection
             </Button>
@@ -286,6 +289,7 @@ function Dashboard() {
         </article>
       </section>
       <AddCollectionDialog
+        allowedDepartments={departments.map((department) => department.name)}
         onAdd={addCollection}
         onOpenChange={setAddCollectionOpen}
         open={addCollectionOpen}

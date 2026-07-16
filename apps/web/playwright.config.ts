@@ -11,6 +11,9 @@ export default defineConfig({
   webServer: {
     command: "pnpm dev",
     env: {
+      BETTER_AUTH_SECRET:
+        process.env.BETTER_AUTH_SECRET ?? "eyeflow-development-secret-change-before-production",
+      BETTER_AUTH_URL: "http://127.0.0.1:3000",
       DATABASE_URL:
         process.env.DATABASE_URL ??
         "postgresql://eyeflow:eyeflow_dev_password@127.0.0.1:5432/eyeflow",

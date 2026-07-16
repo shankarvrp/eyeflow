@@ -15,6 +15,8 @@
     "typecheck": "tsr generate && tsc --noEmit"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "1.6.23",
+    "@eyeflow/auth": "workspace:*",
     "@eyeflow/db": "workspace:*",
     "@eyeflow/shared": "workspace:*",
     "@eyeflow/ui": "workspace:*",
@@ -24,6 +26,7 @@
     "@tanstack/react-router": "1.170.18",
     "@tanstack/react-start": "1.168.28",
     "@tanstack/react-table": "8.21.3",
+    "better-auth": "1.6.23",
     "drizzle-orm": "0.45.2",
     "lucide-react": "1.24.0",
     "react": "19.2.7",

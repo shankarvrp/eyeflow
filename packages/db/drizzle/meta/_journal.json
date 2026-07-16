@@ -8,6 +8,13 @@
       "when": 1784050050697,
       "tag": "0000_chunky_ender_wiggin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784223410376,
+      "tag": "0001_yielding_shockwave",
+      "breakpoints": true
     }
   ]
 }

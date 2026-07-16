@@ -1,4 +1,4 @@
-import { departments, paymentKinds } from "@eyeflow/shared";
+import { type departments as departmentNames, paymentKinds } from "@eyeflow/shared";
 import {
   Button,
   Dialog,
@@ -22,6 +22,7 @@ import {
 } from "./collection-schema";
 
 interface AddCollectionDialogProps {
+  allowedDepartments: readonly (typeof departmentNames)[number][];
   onAdd: (collection: NewCollection) => Promise<void>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -52,7 +53,12 @@ const fieldError = (errors: unknown[]): string | undefined => {
   return undefined;
 };
 
-export function AddCollectionDialog({ onAdd, onOpenChange, open }: AddCollectionDialogProps) {
+export function AddCollectionDialog({
+  allowedDepartments,
+  onAdd,
+  onOpenChange,
+  open,
+}: AddCollectionDialogProps) {
   const [saved, setSaved] = useState(false);
   const [submitError, setSubmitError] = useState<string>();
   const form = useForm({
@@ -130,7 +136,7 @@ export function AddCollectionDialog({ onAdd, onOpenChange, open }: AddCollection
               <fieldset>
                 <legend className="form-label">Department</legend>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                  {departments.map((department) => (
+                  {allowedDepartments.map((department) => (
                     <button
                       aria-pressed={field.state.value === department}
                       className="choice-button"

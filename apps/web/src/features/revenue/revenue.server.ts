@@ -1,6 +1,6 @@
 import { createDatabase } from "@eyeflow/db";
 import { customers, departments, payments } from "@eyeflow/db/schema";
-import { desc, eq, ilike } from "drizzle-orm";
+import { desc, eq, ilike, inArray } from "drizzle-orm";
 import type {
   DashboardData,
   DepartmentSummary,
@@ -19,9 +19,11 @@ function getDatabase() {
   return database;
 }
 
-export async function readDashboardData(): Promise<DashboardData> {
+export async function readDashboardData(
+  accessibleDepartmentNames: string[] | null = null,
+): Promise<DashboardData> {
   const db = getDatabase();
-  const paymentRows = await db
+  const paymentQuery = db
     .select({
       amount: payments.amount,
       customerId: customers.id,
@@ -34,14 +36,28 @@ export async function readDashboardData(): Promise<DashboardData> {
     })
     .from(payments)
     .innerJoin(customers, eq(payments.customerId, customers.id))
-    .innerJoin(departments, eq(payments.departmentId, departments.id))
-    .orderBy(desc(payments.occurredAt));
+    .innerJoin(departments, eq(payments.departmentId, departments.id));
 
-  const departmentRows = await db
-    .select({ name: departments.name })
-    .from(departments)
-    .where(eq(departments.isActive, true))
-    .orderBy(departments.displayOrder);
+  const paymentRows =
+    accessibleDepartmentNames === null
+      ? await paymentQuery.orderBy(desc(payments.occurredAt))
+      : accessibleDepartmentNames.length === 0
+        ? []
+        : await paymentQuery
+            .where(inArray(departments.name, accessibleDepartmentNames))
+            .orderBy(desc(payments.occurredAt));
+
+  const departmentQuery = db.select({ name: departments.name }).from(departments);
+  const departmentRows =
+    accessibleDepartmentNames === null
+      ? await departmentQuery
+          .where(eq(departments.isActive, true))
+          .orderBy(departments.displayOrder)
+      : accessibleDepartmentNames.length === 0
+        ? []
+        : await departmentQuery
+            .where(inArray(departments.name, accessibleDepartmentNames))
+            .orderBy(departments.displayOrder);
 
   const totals = {
     cash: 0,
@@ -98,7 +114,11 @@ export async function readDashboardData(): Promise<DashboardData> {
   };
 }
 
-export async function insertCollection(collection: NewCollection): Promise<DashboardData> {
+export async function insertCollection(
+  collection: NewCollection,
+  actorUserId: string,
+  accessibleDepartmentNames: string[] | null,
+): Promise<DashboardData> {
   const db = getDatabase();
 
   await db.transaction(async (transaction) => {
@@ -134,8 +154,9 @@ export async function insertCollection(collection: NewCollection): Promise<Dashb
       discount: collection.discount.toFixed(2),
       kind: collection.mode,
       providerOrMode: collection.providerOrMode,
+      createdByUserId: actorUserId,
     });
   });
 
-  return readDashboardData();
+  return readDashboardData(accessibleDepartmentNames);
 }

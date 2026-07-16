@@ -9,7 +9,7 @@ EyeFlow is a modern, local-first revenue and practice-operations platform for ey
 - Tailwind CSS v4 and a shadcn-ready shared UI package
 - TanStack Query, Form, and Table
 - Drizzle ORM and PostgreSQL
-- Better Auth composition point for authentication and RBAC
+- Better Auth email/password sessions with role and department-level RBAC
 - pnpm workspaces and Turborepo
 - Biome, Vitest, Playwright, and GitHub Actions
 - Docker Compose for local infrastructure and Kustomize manifests for K3s
@@ -28,10 +28,16 @@ pnpm install
 docker compose up -d postgres
 pnpm db:generate
 pnpm db:migrate
+pnpm db:seed
 pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+The development seed creates `admin@eyeflow.local` with password
+`EyeFlowAdmin123!`. Override `EYEFLOW_ADMIN_EMAIL`, `EYEFLOW_ADMIN_PASSWORD`,
+and `EYEFLOW_ADMIN_NAME` in `.env`, and never use the development password with
+real clinic data.
 
 To run the application and PostgreSQL together as containers:
 
@@ -51,6 +57,7 @@ docker compose up --build
 | `pnpm test:e2e` | Run Playwright browser tests |
 | `pnpm db:generate` | Generate a Drizzle migration from the schema |
 | `pnpm db:migrate` | Apply pending migrations |
+| `pnpm db:seed` | Seed departments, demo collections, and the development administrator |
 | `pnpm db:studio` | Open Drizzle Studio |
 
 ## Repository layout
@@ -78,4 +85,4 @@ kubectl apply -k infra/k8s/base
 
 ## Project status
 
-Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. The Add Collection vertical slice supports validated patient, department, payment-mode, amount, discount, and provider/mode entry with PostgreSQL persistence and immediate dashboard updates. Authentication routes, RBAC enforcement, audit events, date filtering, exports, and live multi-user updates arrive in subsequent vertical slices.
+Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. The Add Collection vertical slice supports validated patient, department, payment-mode, amount, discount, and provider/mode entry with PostgreSQL persistence and immediate dashboard updates. Better Auth now protects the dashboard and server functions, broad capabilities are role-controlled, department access is stored per user, and each new payment records its actor. User administration, full audit events, date filtering, exports, and live multi-user updates arrive in subsequent vertical slices.

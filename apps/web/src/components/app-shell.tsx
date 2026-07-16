@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { authClient } from "../lib/auth-client";
 import { ThemeToggle } from "./theme-toggle";
 
 const navigation = [
@@ -27,10 +28,27 @@ const navigation = [
 
 interface AppShellProps {
   children: ReactNode;
+  user: {
+    email: string;
+    name: string;
+    role?: string | null | undefined;
+  };
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, user }: AppShellProps) {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const initials = user.name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  const roleLabel = user.role?.split(",")[0] ?? "viewer";
+
+  const signOut = async () => {
+    await authClient.signOut();
+    window.location.assign("/login");
+  };
 
   return (
     <div className="min-h-screen bg-[var(--surface)] text-[var(--foreground)]">
@@ -145,15 +163,20 @@ export function AppShell({ children }: AppShellProps) {
               <span className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-rose-500 ring-2 ring-[var(--surface)]" />
             </Button>
             <ThemeToggle />
-            <div className="ml-2 hidden items-center gap-3 border-l border-[var(--border)] pl-4 sm:flex">
+            <button
+              className="ml-2 hidden items-center gap-3 border-l border-[var(--border)] pl-4 text-left sm:flex"
+              onClick={() => void signOut()}
+              title={`Signed in as ${user.email}. Click to sign out.`}
+              type="button"
+            >
               <div className="grid size-9 place-items-center rounded-xl bg-slate-900 text-sm font-semibold text-white">
-                DS
+                {initials}
               </div>
               <div className="leading-tight">
-                <p className="text-sm font-semibold">Dr. Shankar</p>
-                <p className="text-xs text-[var(--muted)]">Administrator</p>
+                <p className="text-sm font-semibold">{user.name}</p>
+                <p className="text-xs capitalize text-[var(--muted)]">{roleLabel}</p>
               </div>
-            </div>
+            </button>
           </div>
         </header>
         <main className="mx-auto max-w-[1600px] p-4 sm:p-8">{children}</main>

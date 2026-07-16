@@ -8,10 +8,11 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "auth:seed": "pnpm --filter @eyeflow/auth db:seed-admin",
     "check": "turbo run check",
     "db:generate": "pnpm --filter @eyeflow/db db:generate",
     "db:migrate": "pnpm --filter @eyeflow/db db:migrate",
-    "db:seed": "pnpm --filter @eyeflow/db db:seed",
+    "db:seed": "pnpm --filter @eyeflow/db db:seed && pnpm auth:seed",
     "db:studio": "pnpm --filter @eyeflow/db db:studio",
     "dev": "turbo run dev",
     "format": "biome format --write .",

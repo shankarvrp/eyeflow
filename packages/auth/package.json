@@ -9,15 +9,21 @@
   "scripts": {
     "build": "tsc --noEmit",
     "check": "biome check .",
+    "db:seed-admin": "tsx src/seed-admin.ts",
     "lint": "biome lint .",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "better-auth": "1.6.23"
+    "@better-auth/drizzle-adapter": "1.6.23",
+    "@eyeflow/db": "workspace:*",
+    "better-auth": "1.6.23",
+    "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.5",
+    "@types/node": "22.19.11",
+    "tsx": "4.21.0",
     "typescript": "6.0.2",
     "vitest": "4.1.5"
   }
