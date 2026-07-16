@@ -15,6 +15,7 @@
     "typecheck": "tsr generate && tsc --noEmit"
   },
   "dependencies": {
+    "@eyeflow/db": "workspace:*",
     "@eyeflow/shared": "workspace:*",
     "@eyeflow/ui": "workspace:*",
     "@tanstack/react-form": "1.33.2",
@@ -23,6 +24,7 @@
     "@tanstack/react-router": "1.170.18",
     "@tanstack/react-start": "1.168.28",
     "@tanstack/react-table": "8.21.3",
+    "drizzle-orm": "0.45.2",
     "lucide-react": "1.24.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",

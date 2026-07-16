@@ -78,4 +78,4 @@ kubectl apply -k infra/k8s/base
 
 ## Project status
 
-Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. The Add Collection vertical slice supports validated patient, department, payment-mode, amount, discount, and provider/mode entry with immediate dashboard updates. Dashboard fixtures and newly entered collections are currently session-scoped; PostgreSQL persistence, authentication routes, RBAC enforcement, audit events, and live multi-user updates arrive in subsequent vertical slices.
+Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. The Add Collection vertical slice supports validated patient, department, payment-mode, amount, discount, and provider/mode entry with PostgreSQL persistence and immediate dashboard updates. Authentication routes, RBAC enforcement, audit events, date filtering, exports, and live multi-user updates arrive in subsequent vertical slices.

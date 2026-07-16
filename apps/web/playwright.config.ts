@@ -10,6 +10,11 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: "pnpm dev",
+    env: {
+      DATABASE_URL:
+        process.env.DATABASE_URL ??
+        "postgresql://eyeflow:eyeflow_dev_password@127.0.0.1:5432/eyeflow",
+    },
     reuseExistingServer: !process.env.CI,
     url: "http://127.0.0.1:3000",
   },

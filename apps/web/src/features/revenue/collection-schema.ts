@@ -39,6 +39,24 @@ export interface NewCollection {
   providerOrMode: string | null;
 }
 
+export const newCollectionServerSchema = z
+  .object({
+    amount: z.number().positive().max(10_000_000),
+    department: z.enum(departments),
+    discount: z.number().min(0).max(10_000_000),
+    mode: z.enum(paymentKinds),
+    patient: z.string().trim().min(2).max(120),
+    providerOrMode: z.string().trim().max(120).nullable(),
+  })
+  .refine((value) => value.discount <= value.amount, {
+    message: "Discount cannot exceed the amount",
+    path: ["discount"],
+  })
+  .refine((value) => value.mode === "cash" || Boolean(value.providerOrMode), {
+    message: "A provider or payment mode is required",
+    path: ["providerOrMode"],
+  });
+
 export function toNewCollection(value: z.infer<typeof collectionSchema>): NewCollection {
   return {
     amount: Number(value.amount),

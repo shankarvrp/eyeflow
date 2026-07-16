@@ -26,6 +26,12 @@ export interface DashboardSummary {
   transactions: number;
 }
 
+export interface DashboardData {
+  departments: DepartmentSummary[];
+  recentCollections: RecentCollection[];
+  summary: DashboardSummary;
+}
+
 export const initialDashboardSummary: DashboardSummary = {
   cash: 67250,
   credit: 36520,

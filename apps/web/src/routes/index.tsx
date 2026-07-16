@@ -19,22 +19,22 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "../components/app-shell";
-import {
-  departmentSummaries,
-  formatCurrency,
-  initialDashboardSummary,
-  recentCollections,
-} from "../features/dashboard/dashboard-data";
+import { formatCurrency } from "../features/dashboard/dashboard-data";
 import { AddCollectionDialog } from "../features/revenue/add-collection-dialog";
-import { type NewCollection, paymentModeLabels } from "../features/revenue/collection-schema";
+import type { NewCollection } from "../features/revenue/collection-schema";
+import { createCollection, getDashboardData } from "../features/revenue/revenue.functions";
 
-export const Route = createFileRoute("/")({ component: Dashboard });
+export const Route = createFileRoute("/")({
+  component: Dashboard,
+  loader: () => getDashboardData(),
+});
 
 function Dashboard() {
+  const loaderData = Route.useLoaderData();
   const [addCollectionOpen, setAddCollectionOpen] = useState(false);
-  const [summary, setSummary] = useState(initialDashboardSummary);
-  const [departments, setDepartments] = useState(departmentSummaries);
-  const [collections, setCollections] = useState(recentCollections);
+  const [summary, setSummary] = useState(loaderData.summary);
+  const [departments, setDepartments] = useState(loaderData.departments);
+  const [collections, setCollections] = useState(loaderData.recentCollections);
   const todayLabel = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "long",
@@ -48,35 +48,11 @@ function Dashboard() {
     { label: "Discount", amount: summary.discount, icon: ReceiptText, accent: "rose" },
   ] as const;
 
-  const addCollection = (collection: NewCollection) => {
-    const netAmount = collection.amount - collection.discount;
-    const now = new Date();
-    setCollections((current) => [
-      {
-        amount: netAmount,
-        department: collection.department,
-        id: crypto.randomUUID(),
-        mode: paymentModeLabels[collection.mode],
-        patient: collection.patient,
-        time: now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
-      },
-      ...current,
-    ]);
-    setDepartments((current) =>
-      current.map((department) =>
-        department.name === collection.department
-          ? { ...department, amount: department.amount + netAmount }
-          : department,
-      ),
-    );
-    setSummary((current) => ({
-      ...current,
-      [collection.mode]: current[collection.mode] + netAmount,
-      discount: current.discount + collection.discount,
-      patients: current.patients + 1,
-      revenue: current.revenue + netAmount,
-      transactions: current.transactions + 1,
-    }));
+  const addCollection = async (collection: NewCollection) => {
+    const updatedDashboard = await createCollection({ data: collection });
+    setCollections(updatedDashboard.recentCollections);
+    setDepartments(updatedDashboard.departments);
+    setSummary(updatedDashboard.summary);
   };
 
   return (

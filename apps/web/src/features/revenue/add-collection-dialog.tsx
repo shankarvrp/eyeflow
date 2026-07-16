@@ -22,7 +22,7 @@ import {
 } from "./collection-schema";
 
 interface AddCollectionDialogProps {
-  onAdd: (collection: NewCollection) => void;
+  onAdd: (collection: NewCollection) => Promise<void>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -54,18 +54,28 @@ const fieldError = (errors: unknown[]): string | undefined => {
 
 export function AddCollectionDialog({ onAdd, onOpenChange, open }: AddCollectionDialogProps) {
   const [saved, setSaved] = useState(false);
+  const [submitError, setSubmitError] = useState<string>();
   const form = useForm({
     defaultValues,
     validators: { onSubmit: collectionSchema },
     onSubmit: async ({ value }) => {
-      const parsed = collectionSchema.parse(value);
-      onAdd(toNewCollection(parsed));
-      setSaved(true);
-      window.setTimeout(() => {
-        setSaved(false);
-        onOpenChange(false);
-        form.reset();
-      }, 650);
+      try {
+        setSubmitError(undefined);
+        const parsed = collectionSchema.parse(value);
+        await onAdd(toNewCollection(parsed));
+        setSaved(true);
+        window.setTimeout(() => {
+          setSaved(false);
+          onOpenChange(false);
+          form.reset();
+        }, 650);
+      } catch (error) {
+        setSubmitError(
+          error instanceof Error
+            ? error.message
+            : "Unable to save this collection. Please try again.",
+        );
+      }
     },
   });
 
@@ -243,6 +253,15 @@ export function AddCollectionDialog({ onAdd, onOpenChange, open }: AddCollection
               );
             }}
           </form.Subscribe>
+
+          {submitError ? (
+            <p
+              className="rounded-xl border border-rose-500/20 bg-rose-500/[0.07] px-4 py-3 text-sm font-medium text-rose-600 dark:text-rose-300"
+              role="alert"
+            >
+              {submitError}
+            </p>
+          ) : null}
 
           <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-5">
             <DialogClose asChild>
