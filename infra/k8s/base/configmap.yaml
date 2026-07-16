@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eyeflow-web
+  namespace: eyeflow
+data:
+  NODE_ENV: production
+  PORT: "3000"
+  BETTER_AUTH_URL: https://eyeflow.local

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "css": "apps/web/src/styles.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "aliases": {
+    "components": "@eyeflow/ui/components",
+    "utils": "@eyeflow/ui/lib/utils",
+    "ui": "@eyeflow/ui/components",
+    "lib": "@eyeflow/ui/lib",
+    "hooks": "@eyeflow/ui/hooks"
+  },
+  "iconLibrary": "lucide"
+}

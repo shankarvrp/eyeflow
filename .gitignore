@@ -1,0 +1,10 @@
+node_modules/
+.turbo/
+.DS_Store
+dist/
+.output/
+.env
+.env.local
+coverage/
+playwright-report/
+test-results/

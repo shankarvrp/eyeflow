@@ -1,0 +1,188 @@
+@import "tailwindcss";
+@source "../../../packages/ui/src/**/*.{ts,tsx}";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  --background: #ffffff;
+  --border: #e7e9ee;
+  --foreground: #111827;
+  --hover: #f4f6f8;
+  --muted: #89919f;
+  --muted-strong: #5c6573;
+  --panel: #ffffff;
+  --sidebar: #fbfcfc;
+  --subtle-panel: #fafbfc;
+  --surface: #f6f8f8;
+  --surface-translucent: rgb(246 248 248 / 88%);
+  --track: #eef1f3;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #0d1117;
+  --border: #252b33;
+  --foreground: #f3f5f7;
+  --hover: #1c222a;
+  --muted: #7f8997;
+  --muted-strong: #aab2bd;
+  --panel: #151a21;
+  --sidebar: #10151b;
+  --subtle-panel: #191f27;
+  --surface: #0d1117;
+  --surface-translucent: rgb(13 17 23 / 88%);
+  --track: #242b34;
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  background: var(--surface);
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--surface);
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-[22px] border shadow-sm;
+    border-color: var(--border);
+    background: var(--panel);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.025);
+  }
+  .panel-title {
+    @apply text-base font-bold tracking-tight;
+  }
+  .panel-subtitle {
+    @apply mt-1 text-xs;
+    color: var(--muted);
+  }
+  .metric-card {
+    @apply rounded-[22px] border p-4 shadow-sm transition sm:p-5;
+    border-color: var(--border);
+    background: var(--panel);
+  }
+  .metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgb(15 23 42 / 0.07);
+  }
+  .metric-icon {
+    @apply grid size-10 place-items-center rounded-xl;
+  }
+  .metric-icon-emerald {
+    @apply bg-emerald-500/10 text-emerald-600 dark:text-emerald-400;
+  }
+  .metric-icon-blue {
+    @apply bg-blue-500/10 text-blue-600 dark:text-blue-400;
+  }
+  .metric-icon-amber {
+    @apply bg-amber-500/10 text-amber-600 dark:text-amber-400;
+  }
+  .metric-icon-rose {
+    @apply bg-rose-500/10 text-rose-600 dark:text-rose-400;
+  }
+  .sidebar-link {
+    @apply flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition;
+    color: var(--muted-strong);
+  }
+  .sidebar-link:hover {
+    color: var(--foreground);
+    background: var(--hover);
+  }
+  .department-dot {
+    @apply size-2.5 rounded-full;
+  }
+  .department-blue,
+  .bar-blue {
+    @apply bg-blue-500;
+  }
+  .department-cyan,
+  .bar-cyan {
+    @apply bg-cyan-500;
+  }
+  .department-green,
+  .bar-green {
+    @apply bg-emerald-500;
+  }
+  .department-orange,
+  .bar-orange {
+    @apply bg-orange-500;
+  }
+  .department-purple,
+  .bar-purple {
+    @apply bg-violet-500;
+  }
+  .form-label {
+    @apply mb-2 block text-sm font-semibold;
+  }
+  .form-control {
+    @apply h-11 w-full rounded-xl border px-3 text-sm outline-none transition placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20;
+    border-color: var(--border);
+    color: var(--foreground);
+    background: var(--background);
+  }
+  .form-control:focus {
+    border-color: rgb(16 185 129 / 0.65);
+  }
+  .form-control[aria-invalid="true"] {
+    border-color: rgb(244 63 94 / 0.65);
+  }
+  .choice-button {
+    @apply flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-500/50;
+    border-color: var(--border);
+    color: var(--muted-strong);
+    background: var(--background);
+  }
+  .choice-button:hover {
+    border-color: rgb(16 185 129 / 0.35);
+    color: var(--foreground);
+  }
+  .choice-button[data-selected="true"] {
+    border-color: rgb(16 185 129 / 0.45);
+    color: rgb(4 120 87);
+    background: rgb(16 185 129 / 0.1);
+  }
+  .dark .choice-button[data-selected="true"] {
+    color: rgb(110 231 183);
+  }
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-in {
+  animation: enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in {
+    animation: none;
+  }
+
+  .metric-card,
+  .metric-card:hover {
+    transform: none;
+    transition: none;
+  }
+}

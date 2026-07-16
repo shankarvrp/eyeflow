@@ -1,0 +1,27 @@
+{
+  "name": "eyeflow",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check": "turbo run check",
+    "db:generate": "pnpm --filter @eyeflow/db db:generate",
+    "db:migrate": "pnpm --filter @eyeflow/db db:migrate",
+    "db:studio": "pnpm --filter @eyeflow/db db:studio",
+    "dev": "turbo run dev",
+    "format": "biome format --write .",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:e2e": "pnpm --filter @eyeflow/web test:e2e",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.5",
+    "turbo": "2.10.5",
+    "typescript": "6.0.2"
+  }
+}
