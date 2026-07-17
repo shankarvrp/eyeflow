@@ -15,6 +15,13 @@
       "when": 1784223410376,
       "tag": "0001_yielding_shockwave",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784226808927,
+      "tag": "0002_aspiring_landau",
+      "breakpoints": true
     }
   ]
 }

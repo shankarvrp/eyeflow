@@ -1,70 +1,85 @@
-import { type DepartmentName, departments, type PaymentKind, paymentKinds } from "@eyeflow/shared";
+import { type DepartmentName, departments, type PaymentKind } from "@eyeflow/shared";
 import { z } from "zod";
 
 export const creditProviders = ["CGHS", "ECHS", "Star Health", "Medi Assist", "Other"] as const;
 export const onlineModes = ["UPI", "Card", "NEFT", "RTGS", "Other"] as const;
 
-const moneyString = z
-  .string()
-  .trim()
-  .min(1, "Enter an amount")
-  .refine((value) => Number.isFinite(Number(value)) && Number(value) >= 0, "Enter a valid amount");
+const amountSchema = z.number().min(0).max(10_000_000);
 
-export const collectionSchema = z
+export const departmentCollectionSchema = z
   .object({
-    amount: moneyString.refine((value) => Number(value) > 0, "Amount must be greater than zero"),
+    cash: amountSchema,
+    credit: amountSchema,
+    creditProvider: z.string().trim().max(120).nullable(),
     department: z.enum(departments),
-    discount: moneyString,
-    mode: z.enum(paymentKinds),
-    patient: z.string().trim().min(2, "Enter at least two characters").max(120),
-    providerOrMode: z.string(),
+    discount: amountSchema,
+    online: amountSchema,
+    onlineMode: z.string().trim().max(120).nullable(),
   })
-  .refine((value) => Number(value.discount) <= Number(value.amount), {
-    message: "Discount cannot exceed the amount",
+  .refine((value) => value.discount <= value.cash + value.credit + value.online, {
+    message: "Discount cannot exceed this department's total",
     path: ["discount"],
   })
-  .refine((value) => value.mode === "cash" || value.providerOrMode.length > 0, {
-    message: "Choose a provider or payment mode",
-    path: ["providerOrMode"],
+  .refine((value) => value.credit === 0 || Boolean(value.creditProvider), {
+    message: "Choose an insurance/provider",
+    path: ["creditProvider"],
+  })
+  .refine((value) => value.online === 0 || Boolean(value.onlineMode), {
+    message: "Choose an online payment mode",
+    path: ["onlineMode"],
   });
 
-export type CollectionFormValues = z.input<typeof collectionSchema>;
+export const collectionBatchSchema = z
+  .object({
+    departments: z.array(departmentCollectionSchema).min(1),
+    patient: z.string().trim().min(2).max(120),
+  })
+  .refine(
+    (value) =>
+      value.departments.some(
+        (department) => department.cash + department.credit + department.online > 0,
+      ),
+    {
+      message: "Enter at least one payment",
+      path: ["departments"],
+    },
+  )
+  .refine(
+    (value) =>
+      new Set(value.departments.map((department) => department.department)).size ===
+      value.departments.length,
+    {
+      message: "Each department may be submitted only once",
+      path: ["departments"],
+    },
+  );
 
-export interface NewCollection {
-  amount: number;
-  department: DepartmentName;
-  discount: number;
-  mode: PaymentKind;
-  patient: string;
-  providerOrMode: string | null;
-}
+export type NewCollectionBatch = z.infer<typeof collectionBatchSchema>;
+export type DepartmentCollection = z.infer<typeof departmentCollectionSchema>;
 
-export const newCollectionServerSchema = z
+export const editCollectionSchema = z
   .object({
     amount: z.number().positive().max(10_000_000),
-    department: z.enum(departments),
-    discount: z.number().min(0).max(10_000_000),
-    mode: z.enum(paymentKinds),
-    patient: z.string().trim().min(2).max(120),
+    discount: amountSchema,
+    id: z.string().uuid(),
     providerOrMode: z.string().trim().max(120).nullable(),
   })
   .refine((value) => value.discount <= value.amount, {
     message: "Discount cannot exceed the amount",
     path: ["discount"],
-  })
-  .refine((value) => value.mode === "cash" || Boolean(value.providerOrMode), {
-    message: "A provider or payment mode is required",
-    path: ["providerOrMode"],
   });
 
-export function toNewCollection(value: z.infer<typeof collectionSchema>): NewCollection {
+export type EditCollection = z.infer<typeof editCollectionSchema>;
+
+export function emptyDepartmentCollection(department: DepartmentName): DepartmentCollection {
   return {
-    amount: Number(value.amount),
-    department: value.department,
-    discount: Number(value.discount),
-    mode: value.mode,
-    patient: value.patient.trim(),
-    providerOrMode: value.mode === "cash" ? null : value.providerOrMode,
+    cash: 0,
+    credit: 0,
+    creditProvider: null,
+    department,
+    discount: 0,
+    online: 0,
+    onlineMode: null,
   };
 }
 

@@ -11,6 +11,7 @@ import {
   CreditCard,
   Download,
   IndianRupee,
+  Pencil,
   Plus,
   Radio,
   ReceiptText,
@@ -19,10 +20,19 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "../components/app-shell";
-import { formatCurrency } from "../features/dashboard/dashboard-data";
+import {
+  formatCurrency,
+  type RecentCollection,
+  type TargetProgress,
+} from "../features/dashboard/dashboard-data";
 import { AddCollectionDialog } from "../features/revenue/add-collection-dialog";
-import type { NewCollection } from "../features/revenue/collection-schema";
-import { createCollection, getDashboardData } from "../features/revenue/revenue.functions";
+import type { EditCollection, NewCollectionBatch } from "../features/revenue/collection-schema";
+import { EditCollectionDialog } from "../features/revenue/edit-collection-dialog";
+import {
+  createCollectionBatch,
+  getDashboardData,
+  updateCollection,
+} from "../features/revenue/revenue.functions";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -32,10 +42,13 @@ export const Route = createFileRoute("/")({
 function Dashboard() {
   const loaderData = Route.useLoaderData();
   const [addCollectionOpen, setAddCollectionOpen] = useState(false);
+  const [editCollectionOpen, setEditCollectionOpen] = useState(false);
+  const [selectedCollection, setSelectedCollection] = useState<RecentCollection | null>(null);
   const [ready, setReady] = useState(false);
   const [summary, setSummary] = useState(loaderData.dashboard.summary);
   const [departments, setDepartments] = useState(loaderData.dashboard.departments);
   const [collections, setCollections] = useState(loaderData.dashboard.recentCollections);
+  const [targets, setTargets] = useState(loaderData.dashboard.targets);
   const todayLabel = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "long",
@@ -51,11 +64,20 @@ function Dashboard() {
     { label: "Discount", amount: summary.discount, icon: ReceiptText, accent: "rose" },
   ] as const;
 
-  const addCollection = async (collection: NewCollection) => {
-    const updatedDashboard = await createCollection({ data: collection });
+  const addCollection = async (collection: NewCollectionBatch) => {
+    const updatedDashboard = await createCollectionBatch({ data: collection });
     setCollections(updatedDashboard.recentCollections);
     setDepartments(updatedDashboard.departments);
     setSummary(updatedDashboard.summary);
+    setTargets(updatedDashboard.targets);
+  };
+
+  const saveCollection = async (collection: EditCollection) => {
+    const updatedDashboard = await updateCollection({ data: collection });
+    setCollections(updatedDashboard.recentCollections);
+    setDepartments(updatedDashboard.departments);
+    setSummary(updatedDashboard.summary);
+    setTargets(updatedDashboard.targets);
   };
 
   return (
@@ -68,7 +90,7 @@ function Dashboard() {
               {todayLabel}
             </div>
             <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
-              Good morning, Dr. Shankar
+              Good morning, {loaderData.session.user.name}
             </h1>
             <p className="mt-2 text-[var(--muted-strong)]">
               Here’s how your clinic is performing today.
@@ -115,7 +137,11 @@ function Dashboard() {
                 <div>
                   <p className="text-xs text-slate-400">Avg. collection</p>
                   <p className="mt-1 text-lg font-semibold">
-                    {formatCurrency(Math.round(summary.revenue / summary.transactions))}
+                    {formatCurrency(
+                      summary.transactions === 0
+                        ? 0
+                        : Math.round(summary.revenue / summary.transactions),
+                    )}
                   </p>
                 </div>
               </div>
@@ -210,23 +236,10 @@ function Dashboard() {
               <QuickStat icon={Building2} label="Departments" value="5" />
               <QuickStat icon={IndianRupee} label="Pending" value="₹18.4K" />
             </div>
-            <div className="mt-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.07] p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
-                    Daily target
-                  </p>
-                  <p className="mt-1 text-xs text-emerald-700/70 dark:text-emerald-300/70">
-                    84% of ₹2,00,000
-                  </p>
-                </div>
-                <span className="text-xl font-bold text-emerald-700 dark:text-emerald-300">
-                  84%
-                </span>
-              </div>
-              <div className="mt-3 h-2 rounded-full bg-emerald-950/10">
-                <div className="h-full w-[84%] rounded-full bg-emerald-500" />
-              </div>
+            <div className="mt-5 space-y-3">
+              <TargetCard target={targets.daily} />
+              {targets.weekly ? <TargetCard target={targets.weekly} /> : null}
+              {targets.monthly ? <TargetCard target={targets.monthly} /> : null}
             </div>
           </article>
         </div>
@@ -250,6 +263,7 @@ function Dashboard() {
                   <th className="px-4 py-3.5 font-semibold">Mode</th>
                   <th className="px-4 py-3.5 font-semibold">Time</th>
                   <th className="px-6 py-3.5 text-right font-semibold">Amount</th>
+                  <th className="px-6 py-3.5 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -281,6 +295,24 @@ function Dashboard() {
                     <td className="px-6 py-4 text-right text-sm font-bold">
                       {formatCurrency(collection.amount)}
                     </td>
+                    <td className="px-6 py-4 text-right">
+                      {collection.canEdit ? (
+                        <Button
+                          aria-label={`Edit ${collection.patient} ${collection.department} ${collection.mode}`}
+                          onClick={() => {
+                            setSelectedCollection(collection);
+                            setEditCollectionOpen(true);
+                          }}
+                          size="sm"
+                          variant="ghost"
+                        >
+                          <Pencil size={14} />
+                          Edit
+                        </Button>
+                      ) : (
+                        <span className="text-xs font-medium text-[var(--muted)]">Locked</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -294,7 +326,44 @@ function Dashboard() {
         onOpenChange={setAddCollectionOpen}
         open={addCollectionOpen}
       />
+      <EditCollectionDialog
+        collection={selectedCollection}
+        onOpenChange={(open) => {
+          setEditCollectionOpen(open);
+          if (!open) setSelectedCollection(null);
+        }}
+        onSave={saveCollection}
+        open={editCollectionOpen}
+      />
     </AppShell>
+  );
+}
+
+function TargetCard({ target }: { target: TargetProgress }) {
+  const percentage =
+    target.target === 0 ? 0 : Math.min(100, Math.round((target.actual / target.target) * 100));
+  return (
+    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.07] p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+            {target.label} target
+          </p>
+          <p className="mt-1 text-xs text-emerald-700/70 dark:text-emerald-300/70">
+            {formatCurrency(target.actual)} of {formatCurrency(target.target)}
+          </p>
+        </div>
+        <span className="text-xl font-bold text-emerald-700 dark:text-emerald-300">
+          {percentage}%
+        </span>
+      </div>
+      <div className="mt-3 h-2 rounded-full bg-emerald-950/10">
+        <div
+          className="h-full rounded-full bg-emerald-500 transition-[width]"
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
   );
 }
 

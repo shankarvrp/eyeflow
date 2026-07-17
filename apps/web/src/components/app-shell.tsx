@@ -43,7 +43,7 @@ export function AppShell({ children, user }: AppShellProps) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
-  const roleLabel = user.role?.split(",")[0] ?? "viewer";
+  const roleLabel = user.role?.split(",")[0] === "admin" ? "admin" : "user";
 
   const signOut = async () => {
     await authClient.signOut();

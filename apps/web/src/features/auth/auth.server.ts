@@ -5,13 +5,15 @@ import { and, eq } from "drizzle-orm";
 import { auth, authDatabase, type EyeFlowSession } from "../../lib/auth.server";
 
 type RevenueAction = "create" | "edit-current" | "edit-history" | "read";
-type RoleName = "admin" | "cashier" | "viewer";
+type RoleName = "admin" | "user";
 
 function primaryRole(role: string | null | undefined): RoleName {
   const candidate = role?.split(",")[0];
-  return candidate === "admin" || candidate === "cashier" || candidate === "viewer"
-    ? candidate
-    : "viewer";
+  return candidate === "admin" ? "admin" : "user";
+}
+
+export function isAdminRole(role: string | null | undefined): boolean {
+  return role?.split(",").includes("admin") ?? false;
 }
 
 export async function getSession(): Promise<EyeFlowSession | null> {
@@ -60,7 +62,7 @@ export async function requireDepartmentPermission(
   action: "create" | "edit-current" | "edit-history" | "view",
   role: string | null | undefined,
 ): Promise<void> {
-  if (role?.split(",").includes("admin")) return;
+  if (isAdminRole(role)) return;
 
   const [access] = await authDatabase
     .select({
@@ -92,7 +94,7 @@ export async function getAccessibleDepartments(
   userId: string,
   role: string | null | undefined,
 ): Promise<string[] | null> {
-  if (role?.split(",").includes("admin")) return null;
+  if (isAdminRole(role)) return null;
 
   const rows = await authDatabase
     .select({ name: departments.name })

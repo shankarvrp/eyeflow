@@ -15,20 +15,14 @@ export const adminRole = accessControl.newRole({
   revenue: ["read", "create", "edit-current", "edit-history"],
 });
 
-export const cashierRole = accessControl.newRole({
+export const userRole = accessControl.newRole({
   dashboard: ["read"],
   revenue: ["read", "create", "edit-current"],
 });
 
-export const viewerRole = accessControl.newRole({
-  dashboard: ["read"],
-  revenue: ["read"],
-});
-
 export const roleDefinitions = {
   admin: adminRole,
-  cashier: cashierRole,
-  viewer: viewerRole,
+  user: userRole,
 } as const;
 
 export type EyeFlowRole = keyof typeof roleDefinitions;

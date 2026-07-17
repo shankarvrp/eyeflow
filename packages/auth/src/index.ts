@@ -3,9 +3,8 @@ import { betterAuth } from "better-auth";
 export {
   accessControl,
   adminRole,
-  cashierRole,
   roleDefinitions,
-  viewerRole,
+  userRole,
 } from "./permissions";
 
 export type EyeFlowAuthOptions = Parameters<typeof betterAuth>[0];

@@ -1,28 +1,55 @@
 import { describe, expect, it } from "vitest";
-import { collectionSchema, toNewCollection } from "./collection-schema";
+import {
+  collectionBatchSchema,
+  editCollectionSchema,
+  emptyDepartmentCollection,
+} from "./collection-schema";
 
-const validCollection = {
-  amount: "1200",
-  department: "OPD" as const,
-  discount: "200",
-  mode: "cash" as const,
-  patient: "Anita Rao",
-  providerOrMode: "",
-};
+describe("collectionBatchSchema", () => {
+  it("accepts payments across several departments", () => {
+    const result = collectionBatchSchema.safeParse({
+      patient: "Anita Rao",
+      departments: [
+        { ...emptyDepartmentCollection("OPD"), cash: 500 },
+        {
+          ...emptyDepartmentCollection("Investigation"),
+          online: 1200,
+          onlineMode: "UPI",
+        },
+      ],
+    });
 
-describe("collection validation", () => {
-  it("creates a typed transaction and calculates numeric values", () => {
-    const result = toNewCollection(collectionSchema.parse(validCollection));
-    expect(result).toMatchObject({ amount: 1200, discount: 200, providerOrMode: null });
+    expect(result.success).toBe(true);
   });
 
-  it("rejects a discount greater than the amount", () => {
-    const result = collectionSchema.safeParse({ ...validCollection, discount: "1201" });
+  it("requires at least one payment", () => {
+    const result = collectionBatchSchema.safeParse({
+      patient: "Anita Rao",
+      departments: [emptyDepartmentCollection("OPD")],
+    });
+
     expect(result.success).toBe(false);
   });
 
-  it("requires a provider for credit payments", () => {
-    const result = collectionSchema.safeParse({ ...validCollection, mode: "credit" });
+  it("requires provider details for credit", () => {
+    const result = collectionBatchSchema.safeParse({
+      patient: "Anita Rao",
+      departments: [{ ...emptyDepartmentCollection("OPD"), credit: 500 }],
+    });
+
     expect(result.success).toBe(false);
+  });
+});
+
+describe("editCollectionSchema", () => {
+  it("does not allow discount above gross amount", () => {
+    expect(
+      editCollectionSchema.safeParse({
+        amount: 100,
+        discount: 200,
+        id: "e75d2d85-58cf-4be2-8d1f-0de77f8519dc",
+        providerOrMode: null,
+      }).success,
+    ).toBe(false);
   });
 });

@@ -9,8 +9,8 @@ export const Route = createFileRoute("/login")({
 });
 
 function Login() {
-  const [email, setEmail] = useState("admin@eyeflow.local");
-  const [password, setPassword] = useState("EyeFlowAdmin123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string>();
   const [submitting, setSubmitting] = useState(false);

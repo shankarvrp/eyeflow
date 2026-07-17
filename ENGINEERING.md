@@ -27,6 +27,9 @@ Only create layers that have behavior. Avoid generic repositories, service wrapp
 - Timestamps are stored with time zone and treated as UTC at boundaries.
 - Monetary amounts use `numeric(12,2)` in PostgreSQL and cross boundaries as decimal strings or validated minor units.
 - Department visibility and mutation permissions are independent capabilities.
+- EyeFlow has two application roles: `admin` and `user`.
+- Users may edit current clinic-day collections; only administrators may edit historical collections.
+- Daily targets are available to both roles. Weekly and monthly targets are administrator-only data.
 - Historical edits require admin authorization and an audit reason.
 - Database transactions protect multi-record financial changes.
 

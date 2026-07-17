@@ -9,10 +9,14 @@ export interface DepartmentSummary {
 
 export interface RecentCollection {
   amount: number;
+  canEdit: boolean;
   department: DepartmentName;
+  discount: number;
   id: string;
   mode: "Cash" | "Credit" | "Online";
+  occurredAt: string;
   patient: string;
+  providerOrMode: string | null;
   time: string;
 }
 
@@ -30,6 +34,17 @@ export interface DashboardData {
   departments: DepartmentSummary[];
   recentCollections: RecentCollection[];
   summary: DashboardSummary;
+  targets: {
+    daily: TargetProgress;
+    monthly?: TargetProgress;
+    weekly?: TargetProgress;
+  };
+}
+
+export interface TargetProgress {
+  actual: number;
+  label: string;
+  target: number;
 }
 
 export const initialDashboardSummary: DashboardSummary = {
@@ -52,35 +67,51 @@ export const departmentSummaries: DepartmentSummary[] = [
 
 export const recentCollections: RecentCollection[] = [
   {
+    canEdit: true,
+    discount: 0,
     id: "1",
     patient: "Anita Rao",
     department: "OPD",
     mode: "Online",
     amount: 1250,
+    occurredAt: new Date().toISOString(),
+    providerOrMode: "UPI",
     time: "10:42 AM",
   },
   {
+    canEdit: true,
+    discount: 0,
     id: "2",
     patient: "Mohan Kumar",
     department: "Opticals",
     mode: "Cash",
     amount: 4800,
+    occurredAt: new Date().toISOString(),
+    providerOrMode: null,
     time: "10:36 AM",
   },
   {
+    canEdit: true,
+    discount: 0,
     id: "3",
     patient: "Sana Iqbal",
     department: "Investigation",
     mode: "Credit",
     amount: 3200,
+    occurredAt: new Date().toISOString(),
+    providerOrMode: "CGHS",
     time: "10:28 AM",
   },
   {
+    canEdit: true,
+    discount: 0,
     id: "4",
     patient: "Peter James",
     department: "Pharmacy",
     mode: "Online",
     amount: 1840,
+    occurredAt: new Date().toISOString(),
+    providerOrMode: "UPI",
     time: "10:15 AM",
   },
 ];

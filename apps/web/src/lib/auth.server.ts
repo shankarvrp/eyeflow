@@ -1,5 +1,5 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { accessControl, adminRole, cashierRole, viewerRole } from "@eyeflow/auth";
+import { accessControl, adminRole, userRole } from "@eyeflow/auth";
 import { createDatabase } from "@eyeflow/db";
 import * as schema from "@eyeflow/db/schema";
 import { betterAuth } from "better-auth";
@@ -29,11 +29,10 @@ export const auth = betterAuth({
   plugins: [
     admin({
       ac: accessControl,
-      defaultRole: "viewer",
+      defaultRole: "user",
       roles: {
         admin: adminRole,
-        cashier: cashierRole,
-        viewer: viewerRole,
+        user: userRole,
       },
     }),
     tanstackStartCookies(),
