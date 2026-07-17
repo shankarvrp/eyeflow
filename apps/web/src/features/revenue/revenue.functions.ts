@@ -6,6 +6,12 @@ import {
   requireRevenuePermission,
 } from "../auth/auth.server";
 import {
+  dashboardQuerySchema,
+  defaultDashboardQuery,
+  validateCollectionDate,
+  validateDashboardRange,
+} from "./collection-query";
+import {
   collectionBatchSchema,
   editCollectionSchema,
   patientWorkspaceUpdateSchema,
@@ -20,28 +26,36 @@ import {
   updatePatientWorkspace as updatePatientWorkspaceRecord,
 } from "./revenue.server";
 
-export const getDashboardData = createServerFn({ method: "GET" }).handler(async () => {
-  const session = await requireRevenuePermission("read");
-  const accessibleDepartments = await getAccessibleDepartments(session.user.id, session.user.role);
-  return {
-    dashboard: await readDashboardData(accessibleDepartments, isAdminRole(session.user.role)),
-    session,
-  };
-});
+export const getDashboardData = createServerFn({ method: "GET" })
+  .validator(dashboardQuerySchema)
+  .handler(async ({ data }) => {
+    const session = await requireRevenuePermission("read");
+    const isAdmin = isAdminRole(session.user.role);
+    const query = validateDashboardRange(data, isAdmin);
+    const accessibleDepartments = await getAccessibleDepartments(
+      session.user.id,
+      session.user.role,
+    );
+    return {
+      dashboard: await readDashboardData(accessibleDepartments, isAdmin, query),
+      session,
+    };
+  });
+
+export const initialDashboardQuery = defaultDashboardQuery();
 
 export const createCollectionBatch = createServerFn({ method: "POST" })
   .validator(collectionBatchSchema)
   .handler(async ({ data }) => {
     const session = await requireRevenuePermission("create");
-    const populatedDepartments = data.departments.filter(
-      (department) => department.cash > 0 || department.credit > 0 || department.online > 0,
-    );
+    const isAdmin = isAdminRole(session.user.role);
+    validateCollectionDate(data.occurredOn, isAdmin);
 
     await Promise.all(
-      populatedDepartments.map((department) =>
+      data.payments.map((payment) =>
         requireDepartmentPermission(
           session.user.id,
-          department.department,
+          payment.department,
           "create",
           session.user.role,
         ),
@@ -52,12 +66,7 @@ export const createCollectionBatch = createServerFn({ method: "POST" })
       session.user.id,
       session.user.role,
     );
-    return insertCollectionBatch(
-      { ...data, departments: populatedDepartments },
-      session.user.id,
-      accessibleDepartments,
-      isAdminRole(session.user.role),
-    );
+    return insertCollectionBatch(data, session.user.id, accessibleDepartments, isAdmin);
   });
 
 export const updateCollection = createServerFn({ method: "POST" })

@@ -7,9 +7,12 @@ import {
   Banknote,
   Building2,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   CircleGauge,
   CreditCard,
-  Download,
+  FileSpreadsheet,
+  FileText,
   IndianRupee,
   Pencil,
   Plus,
@@ -27,6 +30,7 @@ import {
   type TargetProgress,
 } from "../features/dashboard/dashboard-data";
 import { AddCollectionDialog } from "../features/revenue/add-collection-dialog";
+import { type DashboardQuery, shiftDateKey } from "../features/revenue/collection-query";
 import type {
   EditCollection,
   NewCollectionBatch,
@@ -37,13 +41,14 @@ import { PatientWorkspaceDialog } from "../features/revenue/patient-workspace-di
 import {
   createCollectionBatch,
   getDashboardData,
+  initialDashboardQuery,
   updateCollection,
   updatePatientWorkspace,
 } from "../features/revenue/revenue.functions";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
-  loader: () => getDashboardData(),
+  loader: () => getDashboardData({ data: initialDashboardQuery }),
 });
 
 function Dashboard() {
@@ -61,12 +66,30 @@ function Dashboard() {
   const [patientCollections, setPatientCollections] = useState(
     loaderData.dashboard.patientCollections,
   );
+  const [pagination, setPagination] = useState(loaderData.dashboard.pagination);
   const [targets, setTargets] = useState(loaderData.dashboard.targets);
+  const [query, setQuery] = useState<DashboardQuery>(initialDashboardQuery);
+  const [draftFrom, setDraftFrom] = useState(initialDashboardQuery.from);
+  const [draftTo, setDraftTo] = useState(initialDashboardQuery.to);
+  const [loadingRange, setLoadingRange] = useState(false);
+  const [rangeError, setRangeError] = useState<string>();
+  const isAdmin = loaderData.session.user.role?.split(",").includes("admin") ?? false;
   const todayLabel = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "long",
     weekday: "long",
   }).format(new Date());
+  const activePage = collectionTab === "recent" ? query.collectionPage : query.patientPage;
+  const activeTotal =
+    collectionTab === "recent" ? pagination.totalCollections : pagination.totalPatients;
+  const displayedTotal =
+    collectionTab === "recent"
+      ? collections.length === 0
+        ? 0
+        : (query.collectionPage - 1) * query.pageSize + collections.length
+      : patientCollections.length === 0
+        ? 0
+        : (query.patientPage - 1) * query.pageSize + patientCollections.length;
 
   useEffect(() => setReady(true), []);
 
@@ -77,31 +100,60 @@ function Dashboard() {
     { label: "Discount", amount: summary.discount, icon: ReceiptText, accent: "rose" },
   ] as const;
 
-  const addCollection = async (collection: NewCollectionBatch) => {
-    const updatedDashboard = await createCollectionBatch({ data: collection });
+  const applyDashboard = (updatedDashboard: typeof loaderData.dashboard) => {
     setCollections(updatedDashboard.recentCollections);
     setPatientCollections(updatedDashboard.patientCollections);
     setDepartments(updatedDashboard.departments);
     setSummary(updatedDashboard.summary);
     setTargets(updatedDashboard.targets);
+    setPagination(updatedDashboard.pagination);
+  };
+
+  const loadDashboard = async (nextQuery: DashboardQuery) => {
+    try {
+      setLoadingRange(true);
+      setRangeError(undefined);
+      const result = await getDashboardData({ data: nextQuery });
+      setQuery(nextQuery);
+      setDraftFrom(nextQuery.from);
+      setDraftTo(nextQuery.to);
+      applyDashboard(result.dashboard);
+    } catch (error) {
+      setRangeError(error instanceof Error ? error.message : "Unable to load that date range.");
+    } finally {
+      setLoadingRange(false);
+    }
+  };
+
+  const addCollection = async (collection: NewCollectionBatch) => {
+    await createCollectionBatch({ data: collection });
+    await loadDashboard({ ...query, collectionPage: 1, patientPage: 1 });
   };
 
   const saveCollection = async (collection: EditCollection) => {
-    const updatedDashboard = await updateCollection({ data: collection });
-    setCollections(updatedDashboard.recentCollections);
-    setPatientCollections(updatedDashboard.patientCollections);
-    setDepartments(updatedDashboard.departments);
-    setSummary(updatedDashboard.summary);
-    setTargets(updatedDashboard.targets);
+    await updateCollection({ data: collection });
+    await loadDashboard(query);
   };
 
   const savePatientWorkspace = async (workspace: PatientWorkspaceUpdate) => {
-    const updatedDashboard = await updatePatientWorkspace({ data: workspace });
-    setCollections(updatedDashboard.recentCollections);
-    setPatientCollections(updatedDashboard.patientCollections);
-    setDepartments(updatedDashboard.departments);
-    setSummary(updatedDashboard.summary);
-    setTargets(updatedDashboard.targets);
+    await updatePatientWorkspace({ data: workspace });
+    await loadDashboard(query);
+  };
+
+  const moveOneDay = (days: number) => {
+    const nextDate = shiftDateKey(query.from, days);
+    void loadDashboard({
+      ...query,
+      collectionPage: 1,
+      from: nextDate,
+      patientPage: 1,
+      to: nextDate,
+    });
+  };
+
+  const exportHref = (format: "pdf" | "xlsx") => {
+    const params = new URLSearchParams({ format, from: query.from, to: query.to });
+    return `/api/exports/collections?${params.toString()}`;
   };
 
   return (
@@ -117,13 +169,23 @@ function Dashboard() {
               Good morning, {loaderData.session.user.name}
             </h1>
             <p className="mt-2 text-[var(--muted-strong)]">
-              Here’s how your clinic is performing today.
+              {query.from === query.to
+                ? "Here’s how your clinic performed on the selected day."
+                : "Here’s how your clinic performed across the selected period."}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline">
-              <Download size={16} />
-              Export report
+            <Button asChild variant="outline">
+              <a download href={exportHref("xlsx")}>
+                <FileSpreadsheet size={16} />
+                Excel
+              </a>
+            </Button>
+            <Button asChild variant="outline">
+              <a download href={exportHref("pdf")}>
+                <FileText size={16} />
+                PDF
+              </a>
             </Button>
             <Button disabled={!ready} onClick={() => setAddCollectionOpen(true)}>
               <Plus size={17} />
@@ -132,12 +194,111 @@ function Dashboard() {
           </div>
         </div>
 
+        <div className="panel mb-5 flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-wrap items-end gap-2">
+            <Button
+              aria-label="Previous day"
+              disabled={loadingRange || (!isAdmin && query.from <= `${query.to.slice(0, 7)}-01`)}
+              onClick={() => moveOneDay(-1)}
+              size="sm"
+              variant="outline"
+            >
+              <ChevronLeft size={16} />
+            </Button>
+            <label>
+              <span className="form-label">From</span>
+              <input
+                className="form-control w-40"
+                max={initialDashboardQuery.to}
+                min={isAdmin ? undefined : `${initialDashboardQuery.to.slice(0, 7)}-01`}
+                onChange={(event) => setDraftFrom(event.target.value)}
+                type="date"
+                value={draftFrom}
+              />
+            </label>
+            <label>
+              <span className="form-label">To</span>
+              <input
+                className="form-control w-40"
+                max={initialDashboardQuery.to}
+                min={isAdmin ? undefined : `${initialDashboardQuery.to.slice(0, 7)}-01`}
+                onChange={(event) => setDraftTo(event.target.value)}
+                type="date"
+                value={draftTo}
+              />
+            </label>
+            <Button
+              disabled={loadingRange}
+              onClick={() =>
+                void loadDashboard({
+                  ...query,
+                  collectionPage: 1,
+                  from: draftFrom,
+                  patientPage: 1,
+                  to: draftTo,
+                })
+              }
+              size="sm"
+            >
+              {loadingRange ? "Loading…" : "Apply range"}
+            </Button>
+            <Button
+              disabled={loadingRange}
+              onClick={() => void loadDashboard(initialDashboardQuery)}
+              size="sm"
+              variant="ghost"
+            >
+              Today
+            </Button>
+            <Button
+              aria-label="Next day"
+              disabled={loadingRange || query.to >= initialDashboardQuery.to}
+              onClick={() => moveOneDay(1)}
+              size="sm"
+              variant="outline"
+            >
+              <ChevronRight size={16} />
+            </Button>
+          </div>
+          <div className="flex items-center gap-3 text-sm text-[var(--muted-strong)]">
+            <CalendarDays size={17} />
+            <span>{query.from === query.to ? query.from : `${query.from} to ${query.to}`}</span>
+            <select
+              aria-label="Rows per page"
+              className="form-control w-24"
+              onChange={(event) =>
+                void loadDashboard({
+                  ...query,
+                  collectionPage: 1,
+                  pageSize: Number(event.target.value),
+                  patientPage: 1,
+                })
+              }
+              value={query.pageSize}
+            >
+              <option value="10">10 rows</option>
+              <option value="25">25 rows</option>
+              <option value="50">50 rows</option>
+            </select>
+          </div>
+        </div>
+        {rangeError ? (
+          <div
+            className="mb-5 rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-700 dark:text-rose-300"
+            role="alert"
+          >
+            {rangeError}
+          </div>
+        ) : null}
+
         <div className="mb-5 grid gap-5 xl:grid-cols-[1.25fr_2fr]">
           <article className="relative overflow-hidden rounded-[26px] bg-slate-950 p-6 text-white shadow-xl shadow-slate-950/10 sm:p-7">
             <div className="absolute -right-16 -top-20 size-56 rounded-full bg-emerald-500/20 blur-3xl" />
             <div className="relative">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-300">Today's revenue</p>
+                <p className="text-sm font-medium text-slate-300">
+                  {query.from === query.to ? "Collection revenue" : "Range revenue"}
+                </p>
                 <span className="flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs text-emerald-300">
                   <Radio size={12} />
                   Live
@@ -249,8 +410,10 @@ function Dashboard() {
           <article className="panel p-5 sm:p-6">
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h2 className="panel-title">Today at a glance</h2>
-                <p className="panel-subtitle">Operational pulse</p>
+                <h2 className="panel-title">
+                  {query.from === query.to ? "Selected day at a glance" : "Period at a glance"}
+                </h2>
+                <p className="panel-subtitle">Operational pulse for the active filter</p>
               </div>
               <CalendarDays className="text-[var(--muted)]" size={20} />
             </div>
@@ -310,9 +473,9 @@ function Dashboard() {
                   : "Consolidated collections and editing by patient"}
               </p>
             </div>
-            <Button size="sm" variant="outline">
-              View all
-            </Button>
+            <span className="text-xs font-medium text-[var(--muted)]">
+              Showing {displayedTotal} of {activeTotal}
+            </span>
           </div>
           {collectionTab === "recent" ? (
             <div className="overflow-x-auto" role="tabpanel">
@@ -454,10 +617,55 @@ function Dashboard() {
               </table>
             </div>
           )}
+          <div className="flex items-center justify-between border-t border-[var(--border)] px-5 py-4 sm:px-6">
+            <p className="text-xs text-[var(--muted)]">
+              Page {activePage} of {Math.max(1, Math.ceil(activeTotal / query.pageSize))}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                disabled={loadingRange || activePage <= 1}
+                onClick={() =>
+                  void loadDashboard({
+                    ...query,
+                    ...(collectionTab === "recent"
+                      ? { collectionPage: activePage - 1 }
+                      : { patientPage: activePage - 1 }),
+                  })
+                }
+                size="sm"
+                variant="outline"
+              >
+                <ChevronLeft size={14} />
+                Previous
+              </Button>
+              <Button
+                disabled={
+                  loadingRange || activePage >= Math.max(1, Math.ceil(activeTotal / query.pageSize))
+                }
+                onClick={() =>
+                  void loadDashboard({
+                    ...query,
+                    ...(collectionTab === "recent"
+                      ? { collectionPage: activePage + 1 }
+                      : { patientPage: activePage + 1 }),
+                  })
+                }
+                size="sm"
+                variant="outline"
+              >
+                Next
+                <ChevronRight size={14} />
+              </Button>
+            </div>
+          </div>
         </article>
       </section>
       <AddCollectionDialog
         allowedDepartments={departments.map((department) => department.name)}
+        canChooseDate={isAdmin}
+        defaultOccurredOn={
+          isAdmin && query.from === query.to ? query.from : initialDashboardQuery.from
+        }
         onAdd={addCollection}
         onOpenChange={setAddCollectionOpen}
         open={addCollectionOpen}

@@ -34,10 +34,15 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-The development seed creates `admin@eyeflow.local` with password
-`EyeFlowAdmin123!`. It also creates `user@eyeflow.local` with password
-`EyeFlowUser123!`. Override the `EYEFLOW_ADMIN_*` and `EYEFLOW_USER_*` values in
-`.env`, and never use the development passwords with real clinic data.
+The development seed creates both supported roles:
+
+| Role | Email | Password | Access |
+| --- | --- | --- | --- |
+| Administrator | `admin@eyeflow.local` | `EyeFlowAdmin123!` | All departments, historical editing, extended date ranges, weekly/monthly targets |
+| User | `user@eyeflow.local` | `EyeFlowUser123!` | Assigned departments, same-day editing, current-month viewing, daily target |
+
+Override the `EYEFLOW_ADMIN_*` and `EYEFLOW_USER_*` values in `.env`, and never
+use the development passwords with real clinic data.
 
 To run the application and PostgreSQL together as containers:
 
@@ -85,4 +90,4 @@ kubectl apply -k infra/k8s/base
 
 ## Project status
 
-Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. A single Add Collection workflow records cash, credit, online, and discounts across every permitted department in one atomic save. Recent Collections now has a Patient-wise companion tab that consolidates every visible payment for a patient and provides one workspace for updating the patient name, departments, payment modes, providers, amounts, and discounts. Patient workspace edits are atomic and record an audit event with the actor, reason, and before/after state. The two supported roles are `admin` and `user`: users can edit current-day collections, while admins can also edit history. Daily targets are shared with both roles; weekly and monthly targets are returned only to administrators. Better Auth protects the dashboard and server functions, department access is stored per user, and each new payment records its actor. User administration, date filtering, exports, and live multi-user updates arrive in subsequent vertical slices.
+Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. The Add Collection workflow supports any number of payments per department—including repeat payments in the same mode—and saves the complete patient collection atomically with its collection date. Recent Collections and Patient-wise views are paginated and follow the active day or range filter. Users may browse the current month and edit today's entries; administrators may browse extended history, enter or edit historical collections, and see weekly/monthly targets. Excel and PDF exports contain the complete role-filtered result set rather than only the visible page. Patient workspace edits are atomic and record an audit event with the actor, reason, and before/after state. Better Auth protects the dashboard and server functions, department access is stored per user, and every payment records its actor. Live multi-user dashboard updates and user administration are planned next.

@@ -42,6 +42,14 @@ export interface DashboardSummary {
 
 export interface DashboardData {
   departments: DepartmentSummary[];
+  filter: { from: string; to: string };
+  pagination: {
+    collectionPage: number;
+    pageSize: number;
+    patientPage: number;
+    totalCollections: number;
+    totalPatients: number;
+  };
   patientCollections: PatientCollectionSummary[];
   recentCollections: RecentCollection[];
   summary: DashboardSummary;

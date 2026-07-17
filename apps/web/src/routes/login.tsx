@@ -140,10 +140,18 @@ function Login() {
               {submitting ? "Signing in…" : "Sign in securely"}
             </Button>
           </form>
-          <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 text-xs leading-5 text-[var(--muted-strong)]">
-            Development administrator: <strong>admin@eyeflow.local</strong>. Change the seeded
-            password before using EyeFlow with real clinic data.
-          </div>
+          {import.meta.env.DEV ? (
+            <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 text-xs leading-5 text-[var(--muted-strong)]">
+              <p>
+                Administrator: <strong>admin@eyeflow.local</strong> /{" "}
+                <strong>EyeFlowAdmin123!</strong>
+              </p>
+              <p className="mt-1">
+                Normal user: <strong>user@eyeflow.local</strong> / <strong>EyeFlowUser123!</strong>
+              </p>
+              <p className="mt-2">Change both seeded passwords before using real clinic data.</p>
+            </div>
+          ) : null}
         </div>
       </section>
     </main>

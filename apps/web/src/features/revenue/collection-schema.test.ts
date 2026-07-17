@@ -2,20 +2,22 @@ import { describe, expect, it } from "vitest";
 import {
   collectionBatchSchema,
   editCollectionSchema,
-  emptyDepartmentCollection,
   patientWorkspaceUpdateSchema,
 } from "./collection-schema";
 
 describe("collectionBatchSchema", () => {
   it("accepts payments across several departments", () => {
     const result = collectionBatchSchema.safeParse({
+      occurredOn: "2026-07-17",
       patient: "Anita Rao",
-      departments: [
-        { ...emptyDepartmentCollection("OPD"), cash: 500 },
+      payments: [
+        { amount: 500, department: "OPD", discount: 0, mode: "cash", providerOrMode: null },
         {
-          ...emptyDepartmentCollection("Investigation"),
-          online: 1200,
-          onlineMode: "UPI",
+          amount: 1200,
+          department: "Investigation",
+          discount: 0,
+          mode: "online",
+          providerOrMode: "UPI",
         },
       ],
     });
@@ -25,8 +27,21 @@ describe("collectionBatchSchema", () => {
 
   it("requires at least one payment", () => {
     const result = collectionBatchSchema.safeParse({
+      occurredOn: "2026-07-17",
       patient: "Anita Rao",
-      departments: [emptyDepartmentCollection("OPD")],
+      payments: [],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects impossible collection dates", () => {
+    const result = collectionBatchSchema.safeParse({
+      occurredOn: "2026-02-31",
+      patient: "Anita Rao",
+      payments: [
+        { amount: 500, department: "OPD", discount: 0, mode: "cash", providerOrMode: null },
+      ],
     });
 
     expect(result.success).toBe(false);
@@ -34,8 +49,17 @@ describe("collectionBatchSchema", () => {
 
   it("requires provider details for credit", () => {
     const result = collectionBatchSchema.safeParse({
+      occurredOn: "2026-07-17",
       patient: "Anita Rao",
-      departments: [{ ...emptyDepartmentCollection("OPD"), credit: 500 }],
+      payments: [
+        {
+          amount: 500,
+          department: "OPD",
+          discount: 0,
+          mode: "credit",
+          providerOrMode: null,
+        },
+      ],
     });
 
     expect(result.success).toBe(false);

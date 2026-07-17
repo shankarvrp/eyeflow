@@ -16,7 +16,7 @@ export const adminRole = accessControl.newRole({
 });
 
 export const userRole = accessControl.newRole({
-  dashboard: ["read"],
+  dashboard: ["read", "export"],
   revenue: ["read", "create", "edit-current"],
 });
 

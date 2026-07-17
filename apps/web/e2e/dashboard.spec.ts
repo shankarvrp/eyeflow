@@ -38,11 +38,19 @@ async function signIn(
 test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await signIn(page);
   await expect(page.getByRole("heading", { name: "Good morning, Dr. Shankar" })).toBeVisible();
-  await expect(page.getByText("Today's revenue")).toBeVisible();
+  await expect(page.getByText("Collection revenue")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add collection" })).toBeVisible();
   await expect(page.getByText("Daily target")).toBeVisible();
   await expect(page.getByText("Weekly target")).toBeVisible();
   await expect(page.getByText("Monthly target")).toBeVisible();
+
+  const excelDownload = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Excel" }).click();
+  await expect((await excelDownload).suggestedFilename()).toMatch(/\.xlsx$/);
+
+  const pdfDownload = page.waitForEvent("download");
+  await page.getByRole("link", { name: "PDF" }).click();
+  await expect((await pdfDownload).suggestedFilename()).toMatch(/\.pdf$/);
 });
 
 test("adds collections for multiple departments in one save", async ({ page }) => {
@@ -52,19 +60,27 @@ test("adds collections for multiple departments in one save", async ({ page }) =
   await page.getByRole("button", { name: "Add collection" }).click();
 
   await page.getByLabel("Patient name").fill(patientName);
-  await page.getByRole("spinbutton", { name: "OPD cash" }).fill("500");
-  await page.getByRole("spinbutton", { name: "Investigation online" }).fill("2500");
-  await page.getByLabel("Investigation online mode").selectOption("UPI");
-  await page.getByRole("spinbutton", { name: "Investigation discount" }).fill("500");
-  await page.getByRole("button", { name: "Add 2 payments" }).click();
+  await page.getByRole("spinbutton", { name: "OPD payment 1 amount" }).fill("500");
+  await page.getByRole("button", { name: "Add OPD payment" }).click();
+  await page.getByRole("spinbutton", { name: "OPD payment 2 amount" }).fill("700");
+  await page.getByLabel("Investigation payment 1 mode").selectOption("online");
+  await page.getByRole("spinbutton", { name: "Investigation payment 1 amount" }).fill("2500");
+  await page.getByLabel("Investigation payment 1 provider or mode").selectOption("UPI");
+  await page.getByRole("spinbutton", { name: "Investigation payment 1 discount" }).fill("500");
+  await page.getByRole("button", { name: "Save 3 payments" }).click();
 
-  await expect(page.getByText(patientName, { exact: true })).toHaveCount(2);
+  await expect(page.getByText(patientName, { exact: true })).toHaveCount(3);
   await page.reload();
-  await expect(page.getByText(patientName, { exact: true })).toHaveCount(2);
+  await expect(page.getByText(patientName, { exact: true })).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "Add collection" })).toBeEnabled();
 
   await page.getByRole("tab", { name: "Patient-wise" }).click();
+  await expect(page.getByRole("tab", { name: "Patient-wise" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   const patientRow = page.getByRole("row").filter({ hasText: patientName });
-  await expect(patientRow.getByText("2", { exact: true })).toBeVisible();
+  await expect(patientRow.getByText("3", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: `Open patient ${patientName}` }).click();
   await page.getByLabel("Patient name").fill(updatedPatientName);
   await page
@@ -89,11 +105,15 @@ test("normal users see only daily targets and can edit today's collections", asy
 
   await page.getByRole("button", { name: "Add collection" }).click();
   await page.getByLabel("Patient name").fill(patientName);
-  await page.getByRole("spinbutton", { name: "Pharmacy cash" }).fill("900");
-  await page.getByRole("button", { name: "Add 1 payment" }).click();
+  await page.getByRole("spinbutton", { name: "Pharmacy payment 1 amount" }).fill("900");
+  await page.getByRole("button", { name: "Save 1 payment" }).click();
   await page.getByRole("button", { name: `Edit ${patientName} Pharmacy Cash` }).click();
   await page.getByRole("spinbutton", { name: "Gross amount" }).fill("1000");
   await page.getByRole("button", { name: "Save changes" }).click();
   const collectionRow = page.getByRole("row").filter({ hasText: patientName });
   await expect(collectionRow.getByText("₹1,000")).toBeVisible();
+
+  const today = await page.getByLabel("From").inputValue();
+  await page.getByRole("button", { name: "Previous day" }).click();
+  await expect(page.getByLabel("From")).not.toHaveValue(today);
 });

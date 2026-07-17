@@ -8,73 +8,106 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@eyeflow/ui";
-import { Check, IndianRupee } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CalendarDays, Check, IndianRupee, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collectionBatchSchema,
   creditProviders,
-  type DepartmentCollection,
-  emptyDepartmentCollection,
+  emptyPaymentLine,
   type NewCollectionBatch,
+  type NewPaymentLine,
   onlineModes,
 } from "./collection-schema";
 
 interface AddCollectionDialogProps {
   allowedDepartments: readonly DepartmentName[];
+  canChooseDate: boolean;
+  defaultOccurredOn: string;
   onAdd: (collection: NewCollectionBatch) => Promise<void>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-type AmountField = "cash" | "credit" | "discount" | "online";
+interface EntryLine extends NewPaymentLine {
+  key: string;
+}
 
 export function AddCollectionDialog({
   allowedDepartments,
+  canChooseDate,
+  defaultOccurredOn,
   onAdd,
   onOpenChange,
   open,
 }: AddCollectionDialogProps) {
-  const createRows = () => allowedDepartments.map(emptyDepartmentCollection);
+  const nextKey = useRef(0);
+  const createRows = () =>
+    allowedDepartments.flatMap((department) => [
+      { ...emptyPaymentLine(department), key: `${department}-initial` },
+    ]);
   const [patient, setPatient] = useState("");
-  const [rows, setRows] = useState<DepartmentCollection[]>(createRows);
+  const [occurredOn, setOccurredOn] = useState(defaultOccurredOn);
+  const [rows, setRows] = useState<EntryLine[]>(createRows);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string>();
 
+  useEffect(() => {
+    if (open) setOccurredOn(defaultOccurredOn);
+  }, [defaultOccurredOn, open]);
+
+  const populatedRows = rows.filter((row) => row.amount > 0);
   const totals = useMemo(
     () =>
-      rows.reduce(
+      populatedRows.reduce(
         (result, row) => ({
           discount: result.discount + row.discount,
-          gross: result.gross + row.cash + row.credit + row.online,
-          net: result.net + row.cash + row.credit + row.online - row.discount,
-          payments:
-            result.payments +
-            Number(row.cash > 0) +
-            Number(row.credit > 0) +
-            Number(row.online > 0),
+          gross: result.gross + row.amount,
+          net: result.net + row.amount - row.discount,
         }),
-        { discount: 0, gross: 0, net: 0, payments: 0 },
+        { discount: 0, gross: 0, net: 0 },
       ),
-    [rows],
+    [populatedRows],
   );
 
   const reset = () => {
     setPatient("");
+    setOccurredOn(defaultOccurredOn);
     setRows(createRows());
     setSubmitError(undefined);
   };
 
-  const updateRow = (
-    department: DepartmentName,
-    update: (row: DepartmentCollection) => DepartmentCollection,
-  ) => {
-    setRows((current) => current.map((row) => (row.department === department ? update(row) : row)));
+  const updateRow = (key: string, update: (row: EntryLine) => EntryLine) => {
+    setRows((current) => current.map((row) => (row.key === key ? update(row) : row)));
+  };
+
+  const addPayment = (department: DepartmentName) => {
+    nextKey.current += 1;
+    setRows((current) => [
+      ...current,
+      { ...emptyPaymentLine(department), key: `${department}-${nextKey.current}` },
+    ]);
+  };
+
+  const removePayment = (key: string, department: DepartmentName) => {
+    setRows((current) => {
+      const departmentRows = current.filter((row) => row.department === department);
+      if (departmentRows.length === 1) {
+        return current.map((row) =>
+          row.key === key ? { ...emptyPaymentLine(department), key: row.key } : row,
+        );
+      }
+      return current.filter((row) => row.key !== key);
+    });
   };
 
   const submit = async () => {
-    const parsed = collectionBatchSchema.safeParse({ departments: rows, patient });
+    const parsed = collectionBatchSchema.safeParse({
+      occurredOn,
+      patient,
+      payments: populatedRows.map(({ key: _key, ...row }) => row),
+    });
     if (!parsed.success) {
-      setSubmitError(parsed.error.issues[0]?.message ?? "Review the collection amounts.");
+      setSubmitError(parsed.error.issues[0]?.message ?? "Review the payment entries.");
       return;
     }
 
@@ -103,7 +136,7 @@ export function AddCollectionDialog({
         <DialogHeader>
           <DialogTitle>Add patient collections</DialogTitle>
           <DialogDescription>
-            Enter every department payment for this patient, then save them together.
+            Add as many payments as needed under each department and save them together.
           </DialogDescription>
         </DialogHeader>
 
@@ -114,7 +147,7 @@ export function AddCollectionDialog({
             void submit();
           }}
         >
-          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div className="grid gap-4 lg:grid-cols-[1fr_220px_auto] lg:items-end">
             <label>
               <span className="form-label">Patient name</span>
               <input
@@ -127,118 +160,89 @@ export function AddCollectionDialog({
                 value={patient}
               />
             </label>
+            <label>
+              <span className="form-label">Collection date</span>
+              <span className="relative block">
+                <CalendarDays
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+                  size={16}
+                />
+                <input
+                  className="form-control pl-10"
+                  disabled={!canChooseDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(event) => setOccurredOn(event.target.value)}
+                  type="date"
+                  value={occurredOn}
+                />
+              </span>
+            </label>
             <div className="flex min-h-11 items-center gap-5 rounded-xl border border-[var(--border)] bg-[var(--subtle-panel)] px-4">
-              <SummaryValue label="Payments" value={String(totals.payments)} />
+              <SummaryValue label="Payments" value={String(populatedRows.length)} />
               <SummaryValue label="Discount" value={formatCurrency(totals.discount)} />
-              <SummaryValue label="Final total" value={formatCurrency(totals.net)} strong />
+              <SummaryValue label="Final" value={formatCurrency(totals.net)} strong />
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
-            <table className="w-full min-w-[1000px] text-left">
-              <thead>
-                <tr className="border-b border-[var(--border)] bg-[var(--subtle-panel)] text-xs uppercase tracking-wider text-[var(--muted)]">
-                  <th className="px-4 py-3 font-semibold">Department</th>
-                  <th className="px-3 py-3 font-semibold">Cash</th>
-                  <th className="px-3 py-3 font-semibold">Credit</th>
-                  <th className="px-3 py-3 font-semibold">Provider</th>
-                  <th className="px-3 py-3 font-semibold">Online</th>
-                  <th className="px-3 py-3 font-semibold">Mode</th>
-                  <th className="px-3 py-3 font-semibold">Discount</th>
-                  <th className="px-4 py-3 text-right font-semibold">Final</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const gross = row.cash + row.credit + row.online;
-                  const invalidDiscount = row.discount > gross;
-                  return (
-                    <tr
-                      className="border-b border-[var(--border)] last:border-0"
-                      key={row.department}
+          <div className="space-y-3">
+            {allowedDepartments.map((department) => {
+              const departmentRows = rows.filter((row) => row.department === department);
+              const departmentTotal = departmentRows.reduce(
+                (sum, row) => sum + row.amount - row.discount,
+                0,
+              );
+              return (
+                <section
+                  className="overflow-hidden rounded-2xl border border-[var(--border)]"
+                  key={department}
+                >
+                  <div className="flex items-center justify-between bg-[var(--subtle-panel)] px-4 py-3">
+                    <div>
+                      <h3 className="text-sm font-bold">{department}</h3>
+                      <p className="text-xs text-[var(--muted)]">
+                        {departmentRows.filter((row) => row.amount > 0).length} payments ·{" "}
+                        {formatCurrency(departmentTotal)}
+                      </p>
+                    </div>
+                    <Button
+                      aria-label={`Add ${department} payment`}
+                      onClick={() => addPayment(department)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
                     >
-                      <td className="px-4 py-4">
-                        <span className="font-semibold">{row.department}</span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <GridMoneyInput
-                          department={row.department}
-                          field="cash"
-                          onChange={updateRow}
-                          value={row.cash}
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <GridMoneyInput
-                          department={row.department}
-                          field="credit"
-                          onChange={updateRow}
-                          value={row.credit}
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <select
-                          aria-label={`${row.department} credit provider`}
-                          className="form-control min-w-32"
-                          disabled={row.credit === 0}
-                          onChange={(event) =>
-                            updateRow(row.department, (current) => ({
-                              ...current,
-                              creditProvider: event.target.value || null,
-                            }))
-                          }
-                          value={row.creditProvider ?? ""}
-                        >
-                          <option value="">Select</option>
-                          {creditProviders.map((provider) => (
-                            <option key={provider}>{provider}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-3">
-                        <GridMoneyInput
-                          department={row.department}
-                          field="online"
-                          onChange={updateRow}
-                          value={row.online}
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <select
-                          aria-label={`${row.department} online mode`}
-                          className="form-control min-w-28"
-                          disabled={row.online === 0}
-                          onChange={(event) =>
-                            updateRow(row.department, (current) => ({
-                              ...current,
-                              onlineMode: event.target.value || null,
-                            }))
-                          }
-                          value={row.onlineMode ?? ""}
-                        >
-                          <option value="">Select</option>
-                          {onlineModes.map((mode) => (
-                            <option key={mode}>{mode}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-3">
-                        <GridMoneyInput
-                          department={row.department}
-                          field="discount"
-                          invalid={invalidDiscount}
-                          onChange={updateRow}
-                          value={row.discount}
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold">
-                        {formatCurrency(Math.max(0, gross - row.discount))}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      <Plus size={14} />
+                      Add payment
+                    </Button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[820px] text-left">
+                      <thead>
+                        <tr className="border-y border-[var(--border)] text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                          <th className="px-4 py-2 font-semibold">Mode</th>
+                          <th className="px-3 py-2 font-semibold">Amount</th>
+                          <th className="px-3 py-2 font-semibold">Provider / mode</th>
+                          <th className="px-3 py-2 font-semibold">Discount</th>
+                          <th className="px-3 py-2 text-right font-semibold">Final</th>
+                          <th className="px-3 py-2 text-right font-semibold">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {departmentRows.map((row, index) => (
+                          <PaymentEntryRow
+                            index={index}
+                            key={row.key}
+                            onRemove={() => removePayment(row.key, department)}
+                            onUpdate={(update) => updateRow(row.key, update)}
+                            row={row}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              );
+            })}
           </div>
 
           {submitError ? (
@@ -262,7 +266,8 @@ export function AddCollectionDialog({
               ) : (
                 <>
                   <Check size={17} />
-                  {`Add ${totals.payments || ""} payment${totals.payments === 1 ? "" : "s"}`}
+                  Save {populatedRows.length || ""} payment
+                  {populatedRows.length === 1 ? "" : "s"}
                 </>
               )}
             </Button>
@@ -273,44 +278,116 @@ export function AddCollectionDialog({
   );
 }
 
-interface GridMoneyInputProps {
-  department: DepartmentName;
-  field: AmountField;
-  invalid?: boolean;
-  onChange: (
-    department: DepartmentName,
-    update: (row: DepartmentCollection) => DepartmentCollection,
-  ) => void;
-  value: number;
+function PaymentEntryRow({
+  index,
+  onRemove,
+  onUpdate,
+  row,
+}: {
+  index: number;
+  onRemove: () => void;
+  onUpdate: (update: (row: EntryLine) => EntryLine) => void;
+  row: EntryLine;
+}) {
+  const options = row.mode === "credit" ? creditProviders : onlineModes;
+  return (
+    <tr className="border-b border-[var(--border)] last:border-0">
+      <td className="px-4 py-3">
+        <select
+          aria-label={`${row.department} payment ${index + 1} mode`}
+          className="form-control min-w-28"
+          onChange={(event) =>
+            onUpdate((current) => ({
+              ...current,
+              mode: event.target.value as NewPaymentLine["mode"],
+              providerOrMode: event.target.value === "cash" ? null : "",
+            }))
+          }
+          value={row.mode}
+        >
+          <option value="cash">Cash</option>
+          <option value="credit">Credit</option>
+          <option value="online">Online</option>
+        </select>
+      </td>
+      <td className="px-3 py-3">
+        <MoneyInput
+          label={`${row.department} payment ${index + 1} amount`}
+          onChange={(amount) => onUpdate((current) => ({ ...current, amount }))}
+          value={row.amount}
+        />
+      </td>
+      <td className="px-3 py-3">
+        {row.mode === "cash" ? (
+          <span className="px-3 text-sm text-[var(--muted)]">Not required</span>
+        ) : (
+          <select
+            aria-label={`${row.department} payment ${index + 1} provider or mode`}
+            className="form-control min-w-36"
+            onChange={(event) =>
+              onUpdate((current) => ({
+                ...current,
+                providerOrMode: event.target.value || null,
+              }))
+            }
+            value={row.providerOrMode ?? ""}
+          >
+            <option value="">Select</option>
+            {options.map((option) => (
+              <option key={option}>{option}</option>
+            ))}
+          </select>
+        )}
+      </td>
+      <td className="px-3 py-3">
+        <MoneyInput
+          invalid={row.discount > row.amount}
+          label={`${row.department} payment ${index + 1} discount`}
+          onChange={(discount) => onUpdate((current) => ({ ...current, discount }))}
+          value={row.discount}
+        />
+      </td>
+      <td className="px-3 py-3 text-right text-sm font-bold">
+        {formatCurrency(row.amount - row.discount)}
+      </td>
+      <td className="px-3 py-3 text-right">
+        <Button
+          aria-label={`Remove ${row.department} payment ${index + 1}`}
+          onClick={onRemove}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <Trash2 size={14} />
+        </Button>
+      </td>
+    </tr>
+  );
 }
 
-function GridMoneyInput({
-  department,
-  field,
+function MoneyInput({
   invalid = false,
+  label,
   onChange,
   value,
-}: GridMoneyInputProps) {
+}: {
+  invalid?: boolean;
+  label: string;
+  onChange: (value: number) => void;
+  value: number;
+}) {
   return (
     <div className="relative min-w-28">
       <IndianRupee
-        aria-hidden="true"
         className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)]"
         size={14}
       />
       <input
         aria-invalid={invalid}
-        aria-label={`${department} ${field}`}
+        aria-label={label}
         className="form-control pl-8"
-        inputMode="decimal"
         min="0"
-        onChange={(event) => {
-          const amount = Math.max(0, Number(event.target.value || 0));
-          onChange(department, (row) => ({
-            ...row,
-            [field]: Number.isFinite(amount) ? amount : 0,
-          }));
-        }}
+        onChange={(event) => onChange(Math.max(0, Number(event.target.value || 0)))}
         step="0.01"
         type="number"
         value={value || ""}
@@ -343,5 +420,5 @@ function formatCurrency(value: number) {
     currency: "INR",
     maximumFractionDigits: 0,
     style: "currency",
-  }).format(value);
+  }).format(Math.max(0, value));
 }

@@ -1,12 +1,18 @@
 import { createDatabase } from "@eyeflow/db";
 import { auditEvents, customers, departments, payments } from "@eyeflow/db/schema";
-import { desc, eq, ilike, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lt } from "drizzle-orm";
 import type {
   DashboardData,
   DepartmentSummary,
   PatientCollectionSummary,
   RecentCollection,
 } from "../dashboard/dashboard-data";
+import {
+  clinicDateBounds,
+  collectionTimestamp,
+  type DashboardQuery,
+  defaultDashboardQuery,
+} from "./collection-query";
 import {
   type EditCollection,
   type NewCollectionBatch,
@@ -25,11 +31,71 @@ function getDatabase() {
   return database;
 }
 
+export interface CollectionExportRow {
+  amount: number;
+  department: string;
+  discount: number;
+  mode: string;
+  occurredAt: Date;
+  patient: string;
+  providerOrMode: string | null;
+}
+
+export async function readCollectionExportRows(
+  accessibleDepartmentNames: string[] | null,
+  query: DashboardQuery,
+): Promise<CollectionExportRow[]> {
+  const db = getDatabase();
+  const bounds = clinicDateBounds(query.from, query.to);
+  const baseQuery = db
+    .select({
+      amount: payments.amount,
+      department: departments.name,
+      discount: payments.discount,
+      kind: payments.kind,
+      occurredAt: payments.occurredAt,
+      patient: customers.name,
+      providerOrMode: payments.providerOrMode,
+    })
+    .from(payments)
+    .innerJoin(customers, eq(payments.customerId, customers.id))
+    .innerJoin(departments, eq(payments.departmentId, departments.id));
+
+  const rows =
+    accessibleDepartmentNames === null
+      ? await baseQuery
+          .where(and(gte(payments.occurredAt, bounds.start), lt(payments.occurredAt, bounds.end)))
+          .orderBy(desc(payments.occurredAt))
+      : accessibleDepartmentNames.length === 0
+        ? []
+        : await baseQuery
+            .where(
+              and(
+                inArray(departments.name, accessibleDepartmentNames),
+                gte(payments.occurredAt, bounds.start),
+                lt(payments.occurredAt, bounds.end),
+              ),
+            )
+            .orderBy(desc(payments.occurredAt));
+
+  return rows.map((row) => ({
+    amount: Number(row.amount),
+    department: row.department,
+    discount: Number(row.discount),
+    mode: paymentModeLabels[row.kind],
+    occurredAt: row.occurredAt,
+    patient: row.patient,
+    providerOrMode: row.providerOrMode,
+  }));
+}
+
 export async function readDashboardData(
   accessibleDepartmentNames: string[] | null = null,
   isAdmin = false,
+  query: DashboardQuery = defaultDashboardQuery(),
 ): Promise<DashboardData> {
   const db = getDatabase();
+  const bounds = clinicDateBounds(query.from, query.to);
   const paymentQuery = db
     .select({
       amount: payments.amount,
@@ -48,11 +114,19 @@ export async function readDashboardData(
 
   const paymentRows =
     accessibleDepartmentNames === null
-      ? await paymentQuery.orderBy(desc(payments.occurredAt))
+      ? await paymentQuery
+          .where(and(gte(payments.occurredAt, bounds.start), lt(payments.occurredAt, bounds.end)))
+          .orderBy(desc(payments.occurredAt))
       : accessibleDepartmentNames.length === 0
         ? []
         : await paymentQuery
-            .where(inArray(departments.name, accessibleDepartmentNames))
+            .where(
+              and(
+                inArray(departments.name, accessibleDepartmentNames),
+                gte(payments.occurredAt, bounds.start),
+                lt(payments.occurredAt, bounds.end),
+              ),
+            )
             .orderBy(desc(payments.occurredAt));
 
   const departmentQuery = db.select({ name: departments.name }).from(departments);
@@ -70,7 +144,7 @@ export async function readDashboardData(
   const todayKey = dateKey(new Date());
   const weekStartKey = startOfWeekKey(new Date());
   const monthKey = todayKey.slice(0, 7);
-  const todayRows = paymentRows.filter((payment) => dateKey(payment.occurredAt) === todayKey);
+  const todayRows = paymentRows;
   const weeklyRows = paymentRows.filter((payment) => dateKey(payment.occurredAt) >= weekStartKey);
   const monthlyRows = paymentRows.filter((payment) =>
     dateKey(payment.occurredAt).startsWith(monthKey),
@@ -123,7 +197,10 @@ export async function readDashboardData(
       minute: "2-digit",
     }),
   });
-  const recentCollections = paymentRows.slice(0, 10).map(toRecentCollection);
+  const collectionOffset = (query.collectionPage - 1) * query.pageSize;
+  const recentCollections = paymentRows
+    .slice(collectionOffset, collectionOffset + query.pageSize)
+    .map(toRecentCollection);
 
   const patientGroups = new Map<string, PatientCollectionSummary>();
   for (const payment of paymentRows) {
@@ -150,9 +227,20 @@ export async function readDashboardData(
     }
   }
 
+  const allPatientCollections = [...patientGroups.values()];
+  const patientOffset = (query.patientPage - 1) * query.pageSize;
+
   return {
     departments: departmentSummaries,
-    patientCollections: [...patientGroups.values()],
+    filter: { from: query.from, to: query.to },
+    pagination: {
+      collectionPage: query.collectionPage,
+      pageSize: query.pageSize,
+      patientPage: query.patientPage,
+      totalCollections: paymentRows.length,
+      totalPatients: allPatientCollections.length,
+    },
+    patientCollections: allPatientCollections.slice(patientOffset, patientOffset + query.pageSize),
     recentCollections,
     summary: {
       ...totals,
@@ -203,45 +291,27 @@ export async function insertCollectionBatch(
       .where(
         inArray(
           departments.name,
-          collection.departments.map((entry) => entry.department),
+          collection.payments.map((entry) => entry.department),
         ),
       );
     const departmentIds = new Map(
       departmentRows.map((department) => [department.name, department.id]),
     );
 
-    for (const entry of collection.departments) {
-      const departmentId = departmentIds.get(entry.department);
-      if (!departmentId) throw new Error(`Department is not configured: ${entry.department}`);
-
-      const entries = [
-        { amount: entry.cash, kind: "cash" as const, providerOrMode: null },
-        {
-          amount: entry.credit,
-          kind: "credit" as const,
-          providerOrMode: entry.creditProvider,
-        },
-        {
-          amount: entry.online,
-          kind: "online" as const,
-          providerOrMode: entry.onlineMode,
-        },
-      ].filter((payment) => payment.amount > 0);
-
-      let remainingDiscount = entry.discount;
-      for (const payment of entries) {
-        const paymentDiscount = Math.min(payment.amount, remainingDiscount);
-        remainingDiscount -= paymentDiscount;
-        await transaction.insert(payments).values({
-          amount: payment.amount.toFixed(2),
-          customerId,
-          departmentId,
-          discount: paymentDiscount.toFixed(2),
-          kind: payment.kind,
-          providerOrMode: payment.providerOrMode,
-          createdByUserId: actorUserId,
-        });
-      }
+    const occurredAt = collectionTimestamp(collection.occurredOn);
+    for (const payment of collection.payments) {
+      const departmentId = departmentIds.get(payment.department);
+      if (!departmentId) throw new Error(`Department is not configured: ${payment.department}`);
+      await transaction.insert(payments).values({
+        amount: payment.amount.toFixed(2),
+        customerId,
+        departmentId,
+        discount: payment.discount.toFixed(2),
+        kind: payment.mode,
+        occurredAt,
+        providerOrMode: payment.mode === "cash" ? null : payment.providerOrMode,
+        createdByUserId: actorUserId,
+      });
     }
   });
 
