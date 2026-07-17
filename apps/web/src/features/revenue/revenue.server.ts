@@ -1,14 +1,16 @@
 import { createDatabase } from "@eyeflow/db";
-import { customers, departments, payments } from "@eyeflow/db/schema";
+import { auditEvents, customers, departments, payments } from "@eyeflow/db/schema";
 import { desc, eq, ilike, inArray } from "drizzle-orm";
 import type {
   DashboardData,
   DepartmentSummary,
+  PatientCollectionSummary,
   RecentCollection,
 } from "../dashboard/dashboard-data";
 import {
   type EditCollection,
   type NewCollectionBatch,
+  type PatientWorkspaceUpdate,
   paymentModeLabels,
 } from "./collection-schema";
 
@@ -106,7 +108,7 @@ export async function readDashboardData(
     name: department.name as DepartmentSummary["name"],
   }));
 
-  const recentCollections: RecentCollection[] = paymentRows.slice(0, 10).map((payment) => ({
+  const toRecentCollection = (payment: (typeof paymentRows)[number]): RecentCollection => ({
     amount: Number(payment.amount) - Number(payment.discount),
     canEdit: isAdmin || dateKey(payment.occurredAt) === todayKey,
     department: payment.department as RecentCollection["department"],
@@ -120,10 +122,37 @@ export async function readDashboardData(
       hour: "2-digit",
       minute: "2-digit",
     }),
-  }));
+  });
+  const recentCollections = paymentRows.slice(0, 10).map(toRecentCollection);
+
+  const patientGroups = new Map<string, PatientCollectionSummary>();
+  for (const payment of paymentRows) {
+    let group = patientGroups.get(payment.customerId);
+    if (!group) {
+      group = {
+        canEdit: false,
+        collections: [],
+        customerId: payment.customerId,
+        departments: [],
+        lastCollectionAt: payment.occurredAt.toISOString(),
+        patient: payment.patient,
+        total: 0,
+      };
+      patientGroups.set(payment.customerId, group);
+    }
+
+    const collection = toRecentCollection(payment);
+    group.collections.push(collection);
+    group.canEdit ||= collection.canEdit;
+    group.total += collection.amount;
+    if (!group.departments.includes(collection.department)) {
+      group.departments.push(collection.department);
+    }
+  }
 
   return {
     departments: departmentSummaries,
+    patientCollections: [...patientGroups.values()],
     recentCollections,
     summary: {
       ...totals,
@@ -236,6 +265,109 @@ export async function updateCollection(
     .where(eq(payments.id, collection.id));
 
   return readDashboardData(accessibleDepartmentNames, isAdmin);
+}
+
+export async function updatePatientWorkspace(
+  workspace: PatientWorkspaceUpdate,
+  actorUserId: string,
+  accessibleDepartmentNames: string[] | null,
+  isAdmin: boolean,
+): Promise<DashboardData> {
+  const db = getDatabase();
+  await db.transaction(async (transaction) => {
+    const [beforeCustomer] = await transaction
+      .select({ name: customers.name })
+      .from(customers)
+      .where(eq(customers.id, workspace.customerId))
+      .limit(1);
+    const beforeCollections = await transaction
+      .select({
+        amount: payments.amount,
+        departmentId: payments.departmentId,
+        discount: payments.discount,
+        id: payments.id,
+        kind: payments.kind,
+        providerOrMode: payments.providerOrMode,
+      })
+      .from(payments)
+      .where(
+        inArray(
+          payments.id,
+          workspace.collections.map((collection) => collection.id),
+        ),
+      );
+
+    await transaction
+      .update(customers)
+      .set({ name: workspace.patient, updatedAt: new Date() })
+      .where(eq(customers.id, workspace.customerId));
+
+    const departmentRows = await transaction
+      .select({ id: departments.id, name: departments.name })
+      .from(departments)
+      .where(
+        inArray(
+          departments.name,
+          workspace.collections.map((collection) => collection.department),
+        ),
+      );
+    const departmentIds = new Map(
+      departmentRows.map((department) => [department.name, department.id]),
+    );
+
+    for (const collection of workspace.collections) {
+      const departmentId = departmentIds.get(collection.department);
+      if (!departmentId) throw new Error(`Department is not configured: ${collection.department}`);
+      await transaction
+        .update(payments)
+        .set({
+          amount: collection.amount.toFixed(2),
+          departmentId,
+          discount: collection.discount.toFixed(2),
+          kind: collection.mode,
+          providerOrMode: collection.mode === "cash" ? null : collection.providerOrMode,
+          updatedAt: new Date(),
+        })
+        .where(eq(payments.id, collection.id));
+    }
+
+    await transaction.insert(auditEvents).values({
+      action: "patient-collections.updated",
+      actorUserId,
+      after: {
+        collections: workspace.collections,
+        patient: workspace.patient,
+      },
+      before: {
+        collections: beforeCollections,
+        patient: beforeCustomer?.name ?? null,
+      },
+      entityId: workspace.customerId,
+      entityType: "patient",
+      reason: workspace.reason,
+    });
+  });
+
+  return readDashboardData(accessibleDepartmentNames, isAdmin);
+}
+
+export async function findPatientCollectionsForAuthorization(
+  customerId: string,
+  paymentIds: string[],
+) {
+  if (paymentIds.length === 0) return [];
+  const db = getDatabase();
+  return db
+    .select({
+      customerId: payments.customerId,
+      department: departments.name,
+      id: payments.id,
+      occurredAt: payments.occurredAt,
+    })
+    .from(payments)
+    .innerJoin(departments, eq(payments.departmentId, departments.id))
+    .where(inArray(payments.id, paymentIds))
+    .then((rows) => rows.filter((row) => row.customerId === customerId));
 }
 
 export async function findCollectionForAuthorization(id: string) {

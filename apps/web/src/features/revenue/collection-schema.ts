@@ -71,6 +71,41 @@ export const editCollectionSchema = z
 
 export type EditCollection = z.infer<typeof editCollectionSchema>;
 
+export const patientCollectionUpdateSchema = z
+  .object({
+    amount: z.number().positive().max(10_000_000),
+    department: z.enum(departments),
+    discount: amountSchema,
+    id: z.string().uuid(),
+    mode: z.enum(["cash", "credit", "online"]),
+    providerOrMode: z.string().trim().max(120).nullable(),
+  })
+  .refine((value) => value.discount <= value.amount, {
+    message: "Discount cannot exceed the amount",
+    path: ["discount"],
+  })
+  .refine((value) => value.mode === "cash" || Boolean(value.providerOrMode), {
+    message: "Provider or payment mode is required",
+    path: ["providerOrMode"],
+  });
+
+export const patientWorkspaceUpdateSchema = z
+  .object({
+    collections: z.array(patientCollectionUpdateSchema).min(1),
+    customerId: z.string().uuid(),
+    patient: z.string().trim().min(2).max(120),
+    reason: z.string().trim().min(3).max(240),
+  })
+  .refine(
+    (value) =>
+      new Set(value.collections.map((collection) => collection.id)).size ===
+      value.collections.length,
+    { message: "A collection may be updated only once", path: ["collections"] },
+  );
+
+export type PatientWorkspaceUpdate = z.infer<typeof patientWorkspaceUpdateSchema>;
+export type PatientCollectionUpdate = z.infer<typeof patientCollectionUpdateSchema>;
+
 export function emptyDepartmentCollection(department: DepartmentName): DepartmentCollection {
   return {
     cash: 0,

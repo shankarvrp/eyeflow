@@ -47,6 +47,7 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
 
 test("adds collections for multiple departments in one save", async ({ page }) => {
   const patientName = `Persistence Patient ${Date.now()}`;
+  const updatedPatientName = `${patientName} Updated`;
   await signIn(page);
   await page.getByRole("button", { name: "Add collection" }).click();
 
@@ -60,6 +61,19 @@ test("adds collections for multiple departments in one save", async ({ page }) =
   await expect(page.getByText(patientName, { exact: true })).toHaveCount(2);
   await page.reload();
   await expect(page.getByText(patientName, { exact: true })).toHaveCount(2);
+
+  await page.getByRole("tab", { name: "Patient-wise" }).click();
+  const patientRow = page.getByRole("row").filter({ hasText: patientName });
+  await expect(patientRow.getByText("2", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: `Open patient ${patientName}` }).click();
+  await page.getByLabel("Patient name").fill(updatedPatientName);
+  await page
+    .getByRole("spinbutton", { name: /^Patient amount/ })
+    .first()
+    .fill("3000");
+  await page.getByLabel("Reason for changes").fill("Corrected patient payment details");
+  await page.getByRole("button", { name: "Save patient changes" }).click();
+  await expect(page.getByText(updatedPatientName, { exact: true })).toBeVisible();
 });
 
 test("normal users see only daily targets and can edit today's collections", async ({ page }) => {

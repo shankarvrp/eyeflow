@@ -20,6 +20,16 @@ export interface RecentCollection {
   time: string;
 }
 
+export interface PatientCollectionSummary {
+  canEdit: boolean;
+  collections: RecentCollection[];
+  customerId: string;
+  departments: DepartmentName[];
+  lastCollectionAt: string;
+  patient: string;
+  total: number;
+}
+
 export interface DashboardSummary {
   cash: number;
   credit: number;
@@ -32,6 +42,7 @@ export interface DashboardSummary {
 
 export interface DashboardData {
   departments: DepartmentSummary[];
+  patientCollections: PatientCollectionSummary[];
   recentCollections: RecentCollection[];
   summary: DashboardSummary;
   targets: {

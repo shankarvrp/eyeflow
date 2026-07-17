@@ -3,6 +3,7 @@ import {
   collectionBatchSchema,
   editCollectionSchema,
   emptyDepartmentCollection,
+  patientWorkspaceUpdateSchema,
 } from "./collection-schema";
 
 describe("collectionBatchSchema", () => {
@@ -49,6 +50,55 @@ describe("editCollectionSchema", () => {
         discount: 200,
         id: "e75d2d85-58cf-4be2-8d1f-0de77f8519dc",
         providerOrMode: null,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("patientWorkspaceUpdateSchema", () => {
+  it("accepts an atomic patient and multi-collection update", () => {
+    const result = patientWorkspaceUpdateSchema.safeParse({
+      collections: [
+        {
+          amount: 500,
+          department: "OPD",
+          discount: 50,
+          id: "e75d2d85-58cf-4be2-8d1f-0de77f8519dc",
+          mode: "cash",
+          providerOrMode: null,
+        },
+        {
+          amount: 1200,
+          department: "Investigation",
+          discount: 0,
+          id: "97fa2dc9-46dd-4f93-8010-78dddb78db1d",
+          mode: "online",
+          providerOrMode: "UPI",
+        },
+      ],
+      customerId: "56a9a5c2-e885-44a9-a77d-aabb7db984a3",
+      patient: "Anita Rao",
+      reason: "Corrected payment entry",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects duplicate collection updates", () => {
+    const collection = {
+      amount: 500,
+      department: "OPD",
+      discount: 0,
+      id: "e75d2d85-58cf-4be2-8d1f-0de77f8519dc",
+      mode: "cash",
+      providerOrMode: null,
+    } as const;
+    expect(
+      patientWorkspaceUpdateSchema.safeParse({
+        collections: [collection, collection],
+        customerId: "56a9a5c2-e885-44a9-a77d-aabb7db984a3",
+        patient: "Anita Rao",
+        reason: "Corrected payment entry",
       }).success,
     ).toBe(false);
   });

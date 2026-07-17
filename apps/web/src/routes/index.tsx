@@ -22,16 +22,23 @@ import { useEffect, useState } from "react";
 import { AppShell } from "../components/app-shell";
 import {
   formatCurrency,
+  type PatientCollectionSummary,
   type RecentCollection,
   type TargetProgress,
 } from "../features/dashboard/dashboard-data";
 import { AddCollectionDialog } from "../features/revenue/add-collection-dialog";
-import type { EditCollection, NewCollectionBatch } from "../features/revenue/collection-schema";
+import type {
+  EditCollection,
+  NewCollectionBatch,
+  PatientWorkspaceUpdate,
+} from "../features/revenue/collection-schema";
 import { EditCollectionDialog } from "../features/revenue/edit-collection-dialog";
+import { PatientWorkspaceDialog } from "../features/revenue/patient-workspace-dialog";
 import {
   createCollectionBatch,
   getDashboardData,
   updateCollection,
+  updatePatientWorkspace,
 } from "../features/revenue/revenue.functions";
 
 export const Route = createFileRoute("/")({
@@ -42,12 +49,18 @@ export const Route = createFileRoute("/")({
 function Dashboard() {
   const loaderData = Route.useLoaderData();
   const [addCollectionOpen, setAddCollectionOpen] = useState(false);
+  const [collectionTab, setCollectionTab] = useState<"patients" | "recent">("recent");
   const [editCollectionOpen, setEditCollectionOpen] = useState(false);
+  const [patientWorkspaceOpen, setPatientWorkspaceOpen] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState<RecentCollection | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<PatientCollectionSummary | null>(null);
   const [ready, setReady] = useState(false);
   const [summary, setSummary] = useState(loaderData.dashboard.summary);
   const [departments, setDepartments] = useState(loaderData.dashboard.departments);
   const [collections, setCollections] = useState(loaderData.dashboard.recentCollections);
+  const [patientCollections, setPatientCollections] = useState(
+    loaderData.dashboard.patientCollections,
+  );
   const [targets, setTargets] = useState(loaderData.dashboard.targets);
   const todayLabel = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
@@ -67,6 +80,7 @@ function Dashboard() {
   const addCollection = async (collection: NewCollectionBatch) => {
     const updatedDashboard = await createCollectionBatch({ data: collection });
     setCollections(updatedDashboard.recentCollections);
+    setPatientCollections(updatedDashboard.patientCollections);
     setDepartments(updatedDashboard.departments);
     setSummary(updatedDashboard.summary);
     setTargets(updatedDashboard.targets);
@@ -75,6 +89,16 @@ function Dashboard() {
   const saveCollection = async (collection: EditCollection) => {
     const updatedDashboard = await updateCollection({ data: collection });
     setCollections(updatedDashboard.recentCollections);
+    setPatientCollections(updatedDashboard.patientCollections);
+    setDepartments(updatedDashboard.departments);
+    setSummary(updatedDashboard.summary);
+    setTargets(updatedDashboard.targets);
+  };
+
+  const savePatientWorkspace = async (workspace: PatientWorkspaceUpdate) => {
+    const updatedDashboard = await updatePatientWorkspace({ data: workspace });
+    setCollections(updatedDashboard.recentCollections);
+    setPatientCollections(updatedDashboard.patientCollections);
     setDepartments(updatedDashboard.departments);
     setSummary(updatedDashboard.summary);
     setTargets(updatedDashboard.targets);
@@ -247,77 +271,189 @@ function Dashboard() {
         <article className="panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-[var(--border)] p-5 sm:px-6">
             <div>
-              <h2 className="panel-title">Recent collections</h2>
-              <p className="panel-subtitle">Latest payments across the clinic</p>
+              <div
+                className="flex items-center gap-1 rounded-xl bg-[var(--track)] p-1"
+                role="tablist"
+              >
+                <button
+                  aria-selected={collectionTab === "recent"}
+                  className={cn(
+                    "rounded-lg px-3 py-2 text-sm font-semibold transition",
+                    collectionTab === "recent"
+                      ? "bg-[var(--panel)] text-[var(--foreground)] shadow-sm"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]",
+                  )}
+                  onClick={() => setCollectionTab("recent")}
+                  role="tab"
+                  type="button"
+                >
+                  Recent collections
+                </button>
+                <button
+                  aria-selected={collectionTab === "patients"}
+                  className={cn(
+                    "rounded-lg px-3 py-2 text-sm font-semibold transition",
+                    collectionTab === "patients"
+                      ? "bg-[var(--panel)] text-[var(--foreground)] shadow-sm"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]",
+                  )}
+                  onClick={() => setCollectionTab("patients")}
+                  role="tab"
+                  type="button"
+                >
+                  Patient-wise
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                {collectionTab === "recent"
+                  ? "Latest payments across the clinic"
+                  : "Consolidated collections and editing by patient"}
+              </p>
             </div>
             <Button size="sm" variant="outline">
               View all
             </Button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] text-left">
-              <thead>
-                <tr className="border-b border-[var(--border)] text-xs uppercase tracking-wider text-[var(--muted)]">
-                  <th className="px-6 py-3.5 font-semibold">Patient</th>
-                  <th className="px-4 py-3.5 font-semibold">Department</th>
-                  <th className="px-4 py-3.5 font-semibold">Mode</th>
-                  <th className="px-4 py-3.5 font-semibold">Time</th>
-                  <th className="px-6 py-3.5 text-right font-semibold">Amount</th>
-                  <th className="px-6 py-3.5 text-right font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {collections.map((collection) => (
-                  <tr
-                    className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--hover)]"
-                    key={collection.id}
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <span className="grid size-9 place-items-center rounded-xl bg-[var(--track)] text-xs font-bold">
-                          {collection.patient
-                            .split(" ")
-                            .map((part) => part[0])
-                            .join("")}
+          {collectionTab === "recent" ? (
+            <div className="overflow-x-auto" role="tabpanel">
+              <table className="w-full min-w-[700px] text-left">
+                <thead>
+                  <tr className="border-b border-[var(--border)] text-xs uppercase tracking-wider text-[var(--muted)]">
+                    <th className="px-6 py-3.5 font-semibold">Patient</th>
+                    <th className="px-4 py-3.5 font-semibold">Department</th>
+                    <th className="px-4 py-3.5 font-semibold">Mode</th>
+                    <th className="px-4 py-3.5 font-semibold">Time</th>
+                    <th className="px-6 py-3.5 text-right font-semibold">Amount</th>
+                    <th className="px-6 py-3.5 text-right font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {collections.map((collection) => (
+                    <tr
+                      className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--hover)]"
+                      key={collection.id}
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <span className="grid size-9 place-items-center rounded-xl bg-[var(--track)] text-xs font-bold">
+                            {collection.patient
+                              .split(" ")
+                              .map((part) => part[0])
+                              .join("")}
+                          </span>
+                          <span className="text-sm font-semibold">{collection.patient}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className="rounded-lg bg-[var(--track)] px-2.5 py-1.5 text-xs font-medium">
+                          {collection.department}
                         </span>
-                        <span className="text-sm font-semibold">{collection.patient}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="rounded-lg bg-[var(--track)] px-2.5 py-1.5 text-xs font-medium">
-                        {collection.department}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-sm text-[var(--muted-strong)]">
-                      {collection.mode}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-[var(--muted)]">{collection.time}</td>
-                    <td className="px-6 py-4 text-right text-sm font-bold">
-                      {formatCurrency(collection.amount)}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {collection.canEdit ? (
+                      </td>
+                      <td className="px-4 py-4 text-sm text-[var(--muted-strong)]">
+                        {collection.mode}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-[var(--muted)]">{collection.time}</td>
+                      <td className="px-6 py-4 text-right text-sm font-bold">
+                        {formatCurrency(collection.amount)}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        {collection.canEdit ? (
+                          <Button
+                            aria-label={`Edit ${collection.patient} ${collection.department} ${collection.mode}`}
+                            onClick={() => {
+                              setSelectedCollection(collection);
+                              setEditCollectionOpen(true);
+                            }}
+                            size="sm"
+                            variant="ghost"
+                          >
+                            <Pencil size={14} />
+                            Edit
+                          </Button>
+                        ) : (
+                          <span className="text-xs font-medium text-[var(--muted)]">Locked</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="overflow-x-auto" role="tabpanel">
+              <table className="w-full min-w-[760px] text-left">
+                <thead>
+                  <tr className="border-b border-[var(--border)] text-xs uppercase tracking-wider text-[var(--muted)]">
+                    <th className="px-6 py-3.5 font-semibold">Patient</th>
+                    <th className="px-4 py-3.5 font-semibold">Departments</th>
+                    <th className="px-4 py-3.5 font-semibold">Payments</th>
+                    <th className="px-4 py-3.5 font-semibold">Last collection</th>
+                    <th className="px-4 py-3.5 text-right font-semibold">Total</th>
+                    <th className="px-6 py-3.5 text-right font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {patientCollections.map((patient) => (
+                    <tr
+                      className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--hover)]"
+                      key={patient.customerId}
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <span className="grid size-9 place-items-center rounded-xl bg-[var(--track)] text-xs font-bold">
+                            {patient.patient
+                              .split(" ")
+                              .map((part) => part[0])
+                              .join("")}
+                          </span>
+                          <span className="text-sm font-semibold">{patient.patient}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          {patient.departments.map((department) => (
+                            <span
+                              className="rounded-lg bg-[var(--track)] px-2 py-1 text-xs font-medium"
+                              key={department}
+                            >
+                              {department}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-[var(--muted-strong)]">
+                        {patient.collections.length}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-[var(--muted)]">
+                        {new Intl.DateTimeFormat("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        }).format(new Date(patient.lastCollectionAt))}
+                      </td>
+                      <td className="px-4 py-4 text-right text-sm font-bold">
+                        {formatCurrency(patient.total)}
+                      </td>
+                      <td className="px-6 py-4 text-right">
                         <Button
-                          aria-label={`Edit ${collection.patient} ${collection.department} ${collection.mode}`}
+                          aria-label={`Open patient ${patient.patient}`}
                           onClick={() => {
-                            setSelectedCollection(collection);
-                            setEditCollectionOpen(true);
+                            setSelectedPatient(patient);
+                            setPatientWorkspaceOpen(true);
                           }}
                           size="sm"
                           variant="ghost"
                         >
-                          <Pencil size={14} />
-                          Edit
+                          {patient.canEdit ? <Pencil size={14} /> : <Users size={14} />}
+                          {patient.canEdit ? "View / edit" : "View"}
                         </Button>
-                      ) : (
-                        <span className="text-xs font-medium text-[var(--muted)]">Locked</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </article>
       </section>
       <AddCollectionDialog
@@ -334,6 +470,16 @@ function Dashboard() {
         }}
         onSave={saveCollection}
         open={editCollectionOpen}
+      />
+      <PatientWorkspaceDialog
+        allowedDepartments={departments.map((department) => department.name)}
+        onOpenChange={(open) => {
+          setPatientWorkspaceOpen(open);
+          if (!open) setSelectedPatient(null);
+        }}
+        onSave={savePatientWorkspace}
+        open={patientWorkspaceOpen}
+        workspace={selectedPatient}
       />
     </AppShell>
   );

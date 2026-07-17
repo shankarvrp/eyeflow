@@ -5,13 +5,19 @@ import {
   requireDepartmentPermission,
   requireRevenuePermission,
 } from "../auth/auth.server";
-import { collectionBatchSchema, editCollectionSchema } from "./collection-schema";
+import {
+  collectionBatchSchema,
+  editCollectionSchema,
+  patientWorkspaceUpdateSchema,
+} from "./collection-schema";
 import {
   findCollectionForAuthorization,
+  findPatientCollectionsForAuthorization,
   insertCollectionBatch,
   isTodayInClinicTime,
   readDashboardData,
   updateCollection as updateCollectionRecord,
+  updatePatientWorkspace as updatePatientWorkspaceRecord,
 } from "./revenue.server";
 
 export const getDashboardData = createServerFn({ method: "GET" }).handler(async () => {
@@ -76,4 +82,58 @@ export const updateCollection = createServerFn({ method: "POST" })
       session.user.role,
     );
     return updateCollectionRecord(data, accessibleDepartments, isAdminRole(session.user.role));
+  });
+
+export const updatePatientWorkspace = createServerFn({ method: "POST" })
+  .validator(patientWorkspaceUpdateSchema)
+  .handler(async ({ data }) => {
+    const collectionIds = data.collections.map((collection) => collection.id);
+    const storedCollections = await findPatientCollectionsForAuthorization(
+      data.customerId,
+      collectionIds,
+    );
+    if (storedCollections.length !== collectionIds.length) {
+      throw new Response("One or more patient collections were not found.", { status: 404 });
+    }
+
+    const hasHistoricalCollection = storedCollections.some(
+      (collection) => !isTodayInClinicTime(collection.occurredAt),
+    );
+    const action = hasHistoricalCollection ? "edit-history" : "edit-current";
+    const session = await requireRevenuePermission(action);
+    const requestedCollections = new Map(
+      data.collections.map((collection) => [collection.id, collection]),
+    );
+
+    await Promise.all(
+      storedCollections.flatMap((stored) => {
+        const requested = requestedCollections.get(stored.id);
+        if (!requested) return [];
+        return [
+          requireDepartmentPermission(
+            session.user.id,
+            stored.department,
+            action,
+            session.user.role,
+          ),
+          requireDepartmentPermission(
+            session.user.id,
+            requested.department,
+            action,
+            session.user.role,
+          ),
+        ];
+      }),
+    );
+
+    const accessibleDepartments = await getAccessibleDepartments(
+      session.user.id,
+      session.user.role,
+    );
+    return updatePatientWorkspaceRecord(
+      data,
+      session.user.id,
+      accessibleDepartments,
+      isAdminRole(session.user.role),
+    );
   });

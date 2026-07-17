@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -145,6 +146,27 @@ export const userDepartmentAccess = pgTable(
   (table) => [primaryKey({ columns: [table.userId, table.departmentId] })],
 );
 
+export const auditEvents = pgTable(
+  "audit_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    reason: text("reason").notNull(),
+    before: jsonb("before").$type<Record<string, unknown>>().notNull(),
+    after: jsonb("after").$type<Record<string, unknown>>().notNull(),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => user.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("audit_events_entity_idx").on(table.entityType, table.entityId),
+    index("audit_events_actor_idx").on(table.actorUserId),
+  ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   accounts: many(account),
   departmentAccess: many(userDepartmentAccess),
@@ -172,6 +194,9 @@ export const userDepartmentAccessRelations = relations(userDepartmentAccess, ({ 
     references: [departments.id],
   }),
   user: one(user, { fields: [userDepartmentAccess.userId], references: [user.id] }),
+}));
+export const auditEventRelations = relations(auditEvents, ({ one }) => ({
+  actor: one(user, { fields: [auditEvents.actorUserId], references: [user.id] }),
 }));
 
 export const currentTimestamp = sql`now()`;
