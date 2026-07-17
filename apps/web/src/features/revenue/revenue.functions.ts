@@ -5,6 +5,7 @@ import {
   requireDepartmentPermission,
   requireRevenuePermission,
 } from "../auth/auth.server";
+import { publishCollectionChanged } from "./collection-events.server";
 import {
   dashboardQuerySchema,
   defaultDashboardQuery,
@@ -66,7 +67,14 @@ export const createCollectionBatch = createServerFn({ method: "POST" })
       session.user.id,
       session.user.role,
     );
-    return insertCollectionBatch(data, session.user.id, accessibleDepartments, isAdmin);
+    const dashboard = await insertCollectionBatch(
+      data,
+      session.user.id,
+      accessibleDepartments,
+      isAdmin,
+    );
+    publishCollectionChanged();
+    return dashboard;
   });
 
 export const updateCollection = createServerFn({ method: "POST" })
@@ -90,7 +98,13 @@ export const updateCollection = createServerFn({ method: "POST" })
       session.user.id,
       session.user.role,
     );
-    return updateCollectionRecord(data, accessibleDepartments, isAdminRole(session.user.role));
+    const dashboard = await updateCollectionRecord(
+      data,
+      accessibleDepartments,
+      isAdminRole(session.user.role),
+    );
+    publishCollectionChanged();
+    return dashboard;
   });
 
 export const updatePatientWorkspace = createServerFn({ method: "POST" })
@@ -139,10 +153,12 @@ export const updatePatientWorkspace = createServerFn({ method: "POST" })
       session.user.id,
       session.user.role,
     );
-    return updatePatientWorkspaceRecord(
+    const dashboard = await updatePatientWorkspaceRecord(
       data,
       session.user.id,
       accessibleDepartments,
       isAdminRole(session.user.role),
     );
+    publishCollectionChanged();
+    return dashboard;
   });

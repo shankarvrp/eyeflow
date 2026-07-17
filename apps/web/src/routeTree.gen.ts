@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiLiveCollectionsRouteImport } from './routes/api/live/collections'
 import { Route as ApiExportsCollectionsRouteImport } from './routes/api/exports/collections'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -22,6 +23,11 @@ const LoginRoute = LoginRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLiveCollectionsRoute = ApiLiveCollectionsRouteImport.update({
+  id: '/api/live/collections',
+  path: '/api/live/collections',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiExportsCollectionsRoute = ApiExportsCollectionsRouteImport.update({
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/exports/collections': typeof ApiExportsCollectionsRoute
+  '/api/live/collections': typeof ApiLiveCollectionsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/exports/collections': typeof ApiExportsCollectionsRoute
+  '/api/live/collections': typeof ApiLiveCollectionsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,30 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/exports/collections': typeof ApiExportsCollectionsRoute
+  '/api/live/collections': typeof ApiLiveCollectionsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/api/auth/$' | '/api/exports/collections'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/api/auth/$'
+    | '/api/exports/collections'
+    | '/api/live/collections'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/api/auth/$' | '/api/exports/collections'
-  id: '__root__' | '/' | '/login' | '/api/auth/$' | '/api/exports/collections'
+  to:
+    | '/'
+    | '/login'
+    | '/api/auth/$'
+    | '/api/exports/collections'
+    | '/api/live/collections'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/api/auth/$'
+    | '/api/exports/collections'
+    | '/api/live/collections'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +92,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiExportsCollectionsRoute: typeof ApiExportsCollectionsRoute
+  ApiLiveCollectionsRoute: typeof ApiLiveCollectionsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -83,6 +109,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/live/collections': {
+      id: '/api/live/collections'
+      path: '/api/live/collections'
+      fullPath: '/api/live/collections'
+      preLoaderRoute: typeof ApiLiveCollectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/exports/collections': {
@@ -107,6 +140,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiExportsCollectionsRoute: ApiExportsCollectionsRoute,
+  ApiLiveCollectionsRoute: ApiLiveCollectionsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

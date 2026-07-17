@@ -21,7 +21,7 @@ import {
   Smartphone,
   Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "../components/app-shell";
 import {
   formatCurrency,
@@ -72,6 +72,8 @@ function Dashboard() {
   const [draftFrom, setDraftFrom] = useState(initialDashboardQuery.from);
   const [draftTo, setDraftTo] = useState(initialDashboardQuery.to);
   const [loadingRange, setLoadingRange] = useState(false);
+  const [liveEnabled, setLiveEnabled] = useState(false);
+  const [liveStatus, setLiveStatus] = useState<"connected" | "reconnecting">("reconnecting");
   const [rangeError, setRangeError] = useState<string>();
   const isAdmin = loaderData.session.user.role?.split(",").includes("admin") ?? false;
   const todayLabel = new Intl.DateTimeFormat("en-GB", {
@@ -91,7 +93,27 @@ function Dashboard() {
         ? 0
         : (query.patientPage - 1) * query.pageSize + patientCollections.length;
 
+  const applyDashboard = useCallback((updatedDashboard: typeof loaderData.dashboard) => {
+    setCollections(updatedDashboard.recentCollections);
+    setPatientCollections(updatedDashboard.patientCollections);
+    setDepartments(updatedDashboard.departments);
+    setSummary(updatedDashboard.summary);
+    setTargets(updatedDashboard.targets);
+    setPagination(updatedDashboard.pagination);
+  }, []);
+
   useEffect(() => setReady(true), []);
+
+  useEffect(() => {
+    if (!isAdmin || !liveEnabled) return;
+    const events = new EventSource("/api/live/collections");
+    events.onopen = () => setLiveStatus("connected");
+    events.onerror = () => setLiveStatus("reconnecting");
+    events.onmessage = () => {
+      void getDashboardData({ data: query }).then((result) => applyDashboard(result.dashboard));
+    };
+    return () => events.close();
+  }, [applyDashboard, isAdmin, liveEnabled, query]);
 
   const headlineMetrics = [
     { label: "Cash", amount: summary.cash, icon: Banknote, accent: "emerald" },
@@ -99,15 +121,6 @@ function Dashboard() {
     { label: "Credit", amount: summary.credit, icon: CreditCard, accent: "amber" },
     { label: "Discount", amount: summary.discount, icon: ReceiptText, accent: "rose" },
   ] as const;
-
-  const applyDashboard = (updatedDashboard: typeof loaderData.dashboard) => {
-    setCollections(updatedDashboard.recentCollections);
-    setPatientCollections(updatedDashboard.patientCollections);
-    setDepartments(updatedDashboard.departments);
-    setSummary(updatedDashboard.summary);
-    setTargets(updatedDashboard.targets);
-    setPagination(updatedDashboard.pagination);
-  };
 
   const loadDashboard = async (nextQuery: DashboardQuery) => {
     try {
@@ -299,10 +312,31 @@ function Dashboard() {
                 <p className="text-sm font-medium text-slate-300">
                   {query.from === query.to ? "Collection revenue" : "Range revenue"}
                 </p>
-                <span className="flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs text-emerald-300">
-                  <Radio size={12} />
-                  Live
-                </span>
+                {isAdmin ? (
+                  <button
+                    aria-pressed={liveEnabled}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition",
+                      liveEnabled
+                        ? "bg-emerald-400/15 text-emerald-300"
+                        : "bg-white/10 text-slate-300 hover:bg-white/15",
+                    )}
+                    onClick={() => setLiveEnabled((current) => !current)}
+                    type="button"
+                  >
+                    <Radio size={12} />
+                    {liveEnabled
+                      ? liveStatus === "connected"
+                        ? "Live on"
+                        : "Connecting…"
+                      : "Enable live"}
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs text-slate-300">
+                    <Radio size={12} />
+                    Updated
+                  </span>
+                )}
               </div>
               <p className="mt-5 text-4xl font-bold tracking-[-0.04em] sm:text-5xl">
                 {formatCurrency(summary.revenue)}

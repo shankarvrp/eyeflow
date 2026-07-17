@@ -43,6 +43,8 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await expect(page.getByText("Daily target")).toBeVisible();
   await expect(page.getByText("Weekly target")).toBeVisible();
   await expect(page.getByText("Monthly target")).toBeVisible();
+  await page.getByRole("button", { name: "Enable live" }).click();
+  await expect(page.getByRole("button", { name: "Live on" })).toBeVisible();
 
   const excelDownload = page.waitForEvent("download");
   await page.getByRole("link", { name: "Excel" }).click();
@@ -102,6 +104,7 @@ test("normal users see only daily targets and can edit today's collections", asy
   await expect(page.getByText("Daily target")).toBeVisible();
   await expect(page.getByText("Weekly target")).toHaveCount(0);
   await expect(page.getByText("Monthly target")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Enable live" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Add collection" }).click();
   await page.getByLabel("Patient name").fill(patientName);
