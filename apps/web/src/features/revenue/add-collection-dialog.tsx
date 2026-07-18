@@ -10,6 +10,7 @@ import {
 } from "@eyeflow/ui";
 import { CalendarDays, Check, IndianRupee, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { EmrPatientOption } from "../emr/emr.server";
 import {
   collectionBatchSchema,
   creditProviders,
@@ -23,6 +24,7 @@ interface AddCollectionDialogProps {
   allowedDepartments: readonly DepartmentName[];
   canChooseDate: boolean;
   defaultOccurredOn: string;
+  loadPatientOptions: (appointmentDate: string) => Promise<EmrPatientOption[]>;
   onAdd: (collection: NewCollectionBatch) => Promise<void>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,6 +38,7 @@ export function AddCollectionDialog({
   allowedDepartments,
   canChooseDate,
   defaultOccurredOn,
+  loadPatientOptions,
   onAdd,
   onOpenChange,
   open,
@@ -51,6 +54,10 @@ export function AddCollectionDialog({
       { ...emptyPaymentLine(department), key: `${department}-initial` },
     ]);
   const [patient, setPatient] = useState("");
+  const [emrPatientId, setEmrPatientId] = useState<string | null>(null);
+  const [patientOptions, setPatientOptions] = useState<EmrPatientOption[]>([]);
+  const [patientOptionsLoading, setPatientOptionsLoading] = useState(false);
+  const [patientPickerOpen, setPatientPickerOpen] = useState(false);
   const [occurredOn, setOccurredOn] = useState(defaultOccurredOn);
   const [rows, setRows] = useState<EntryLine[]>(createRows);
   const [submitting, setSubmitting] = useState(false);
@@ -60,6 +67,25 @@ export function AddCollectionDialog({
     if (open) setOccurredOn(defaultOccurredOn);
   }, [defaultOccurredOn, open]);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setPatientOptionsLoading(true);
+    void loadPatientOptions(occurredOn)
+      .then((options) => {
+        if (!cancelled) setPatientOptions(options);
+      })
+      .catch(() => {
+        if (!cancelled) setPatientOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPatientOptionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPatientOptions, occurredOn, open]);
+
   const populatedRows = rows.filter((row) => row.amount > 0);
   const activeDepartments = allowedDepartments.filter((department) =>
     rows.some((row) => row.department === department),
@@ -67,6 +93,16 @@ export function AddCollectionDialog({
   const availableDepartments = allowedDepartments.filter(
     (department) => !activeDepartments.includes(department),
   );
+  const matchingPatientOptions = patientOptions
+    .filter((option) => {
+      const search = patient.trim().toLocaleLowerCase("en-IN");
+      return (
+        search.length === 0 ||
+        option.displayName.toLocaleLowerCase("en-IN").includes(search) ||
+        option.externalPatientId.toLocaleLowerCase("en-IN").includes(search)
+      );
+    })
+    .slice(0, 8);
   const totals = useMemo(
     () =>
       populatedRows.reduce(
@@ -82,6 +118,8 @@ export function AddCollectionDialog({
 
   const reset = () => {
     setPatient("");
+    setEmrPatientId(null);
+    setPatientPickerOpen(false);
     setOccurredOn(defaultOccurredOn);
     setRows(createRows());
     setSubmitError(undefined);
@@ -115,6 +153,7 @@ export function AddCollectionDialog({
 
   const submit = async () => {
     const parsed = collectionBatchSchema.safeParse({
+      emrPatientId,
       occurredOn,
       patient,
       payments: populatedRows.map(({ key: _key, ...row }) => row),
@@ -161,17 +200,76 @@ export function AddCollectionDialog({
           }}
         >
           <div className="grid gap-4 lg:grid-cols-[1fr_220px_auto] lg:items-end">
-            <label>
+            <label className="relative">
               <span className="form-label">Patient name</span>
               <input
+                aria-autocomplete="list"
+                aria-controls="emr-patient-options"
+                aria-expanded={patientPickerOpen}
                 autoComplete="off"
                 autoFocus
                 className="form-control"
                 maxLength={120}
-                onChange={(event) => setPatient(event.target.value)}
-                placeholder="e.g. Anita Rao"
+                onBlur={() => setPatientPickerOpen(false)}
+                onChange={(event) => {
+                  setPatient(event.target.value);
+                  setEmrPatientId(null);
+                  setPatientPickerOpen(true);
+                }}
+                onFocus={() => setPatientPickerOpen(true)}
+                placeholder="Search today’s EMR patients or type a name"
+                role="combobox"
                 value={patient}
               />
+              {patientPickerOpen ? (
+                <div
+                  className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-2 shadow-2xl"
+                  id="emr-patient-options"
+                  role="listbox"
+                >
+                  {patientOptionsLoading ? (
+                    <p className="px-3 py-4 text-sm text-[var(--muted)]">Loading EMR patients…</p>
+                  ) : matchingPatientOptions.length > 0 ? (
+                    matchingPatientOptions.map((option) => (
+                      <button
+                        className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-[var(--subtle-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                        key={option.id}
+                        onClick={() => {
+                          setPatient(option.displayName);
+                          setEmrPatientId(option.id);
+                          setPatientPickerOpen(false);
+                        }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        role="option"
+                        type="button"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold">
+                            {option.displayName}
+                          </span>
+                          <span className="block text-xs text-[var(--muted)]">
+                            {option.externalPatientId}
+                            {option.visitType ? ` · ${option.visitType}` : ""}
+                          </span>
+                        </span>
+                        {option.hasEyeFlowRecord ? (
+                          <span className="rounded-full bg-slate-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--muted-strong)]">
+                            Existing
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-emerald-500/12 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                            New
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-3 py-4 text-sm text-[var(--muted)]">
+                      No synchronized EMR patients for this date. You can still enter a name.
+                    </p>
+                  )}
+                </div>
+              ) : null}
             </label>
             <label>
               <span className="form-label">Collection date</span>

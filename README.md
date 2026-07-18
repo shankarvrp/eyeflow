@@ -64,6 +64,26 @@ docker compose up --build
 | `pnpm db:migrate` | Apply pending migrations |
 | `pnpm db:seed` | Seed departments, demo collections, and development admin/user accounts |
 | `pnpm db:studio` | Open Drizzle Studio |
+| `pnpm emr:login` | Open a private local browser profile and establish the FOSS EHR session |
+| `pnpm emr:sync [YYYY-MM-DD]` | Synchronize patient appointments for today or an explicit date |
+
+## FOSS EHR patient synchronization
+
+FOSS EHR does not expose a supported patient API, so EyeFlow uses an operator-controlled
+Playwright browser profile. Run `pnpm emr:login`, complete the login in the browser that opens,
+and press Enter in the terminal after the appointments page appears. EyeFlow stores only the
+resulting local browser profile under `.eyeflow/`; it never requests or stores the EMR password.
+
+After authentication, run `pnpm emr:sync` for today's appointments or
+`pnpm emr:sync 2026-07-18` for a specific date. The connector imports only the stable patient
+number, display name, appointment identifier/date, and visit type. It deliberately excludes phone
+numbers and clinical details. In Add Collection, the patient field becomes a searchable picker for
+the selected collection date. Patients without an existing EyeFlow record carry a green **New**
+badge; selecting one links future collections by stable EMR patient number rather than by name.
+
+The connector is intended for a trusted local host. The saved EMR session is sensitive, is ignored
+by Git, and must not be copied into images or shared storage. Because the integration follows the
+EMR user interface, rerun its parser tests and review selectors whenever the EMR UI changes.
 
 ## Repository layout
 
@@ -90,4 +110,4 @@ kubectl apply -k infra/k8s/base
 
 ## Project status
 
-Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. The Add Collection workflow opens with OPD and Pharmacy as the primary departments; Investigation, OT, and Opticals can be added on demand. Every active department supports repeat payments in the same or different modes, and the complete patient collection is saved atomically with its collection date. The Patient-wise workspace retains existing department rows and can append new payments for any permitted department in the same audited save. Recent Collections and Patient-wise views are paginated and follow the active day or range filter. Users may browse the current month and edit today's entries; administrators may browse extended history, enter or edit historical collections, and see weekly/monthly targets. Excel and PDF exports contain the complete role-filtered result set rather than only the visible page. Administrators can enable a live dashboard connection to receive pushed collection updates without refreshing. Better Auth protects the dashboard and server functions, department access is stored per user, and every payment records its actor. User administration and a shared multi-instance event backplane are planned next.
+Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. The Add Collection workflow opens with OPD and Pharmacy as the primary departments; Investigation, OT, and Opticals can be added on demand. Every active department supports repeat payments in the same or different modes, and the complete patient collection is saved atomically with its collection date. The Patient-wise workspace retains existing department rows and can append new payments for any permitted department in the same audited save. Recent Collections and Patient-wise views are paginated and follow the active day or range filter. Users may browse the current month and edit today's entries; administrators may browse extended history, enter or edit historical collections, and see weekly/monthly targets. Excel and PDF exports contain the complete role-filtered result set rather than only the visible page. Administrators can enable a live dashboard connection to receive pushed collection updates without refreshing. Better Auth protects the dashboard and server functions, department access is stored per user, and every payment records its actor. The local FOSS EHR browser connector synchronizes a minimal patient/appointment catalog for the collection picker without storing EMR credentials. User administration and a shared multi-instance event backplane are planned next.

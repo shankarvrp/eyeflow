@@ -25,6 +25,7 @@ export const newPaymentLineSchema = z
   });
 
 export const collectionBatchSchema = z.object({
+  emrPatientId: z.string().uuid().nullable().optional(),
   occurredOn: isoDateSchema,
   patient: z.string().trim().min(2).max(120),
   payments: z.array(newPaymentLineSchema).min(1, "Add at least one payment"),

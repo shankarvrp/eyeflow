@@ -1,5 +1,5 @@
 import { createDatabase } from "@eyeflow/db";
-import { auditEvents, customers, departments, payments } from "@eyeflow/db/schema";
+import { auditEvents, customers, departments, emrPatients, payments } from "@eyeflow/db/schema";
 import { and, desc, eq, gte, ilike, inArray, lt } from "drizzle-orm";
 import type {
   DashboardData,
@@ -268,18 +268,38 @@ export async function insertCollectionBatch(
   const db = getDatabase();
 
   await db.transaction(async (transaction) => {
-    const [existingCustomer] = await transaction
-      .select({ id: customers.id })
-      .from(customers)
-      .where(ilike(customers.name, collection.patient))
-      .limit(1);
+    const [selectedEmrPatient] = collection.emrPatientId
+      ? await transaction
+          .select({ displayName: emrPatients.displayName, id: emrPatients.id })
+          .from(emrPatients)
+          .where(eq(emrPatients.id, collection.emrPatientId))
+          .limit(1)
+      : [];
+    if (collection.emrPatientId && !selectedEmrPatient) {
+      throw new Error("The selected EMR patient is no longer available. Refresh the patient list.");
+    }
+
+    const [existingCustomer] = selectedEmrPatient
+      ? await transaction
+          .select({ id: customers.id })
+          .from(customers)
+          .where(eq(customers.emrPatientId, selectedEmrPatient.id))
+          .limit(1)
+      : await transaction
+          .select({ id: customers.id })
+          .from(customers)
+          .where(ilike(customers.name, collection.patient))
+          .limit(1);
 
     const customerId =
       existingCustomer?.id ??
       (
         await transaction
           .insert(customers)
-          .values({ name: collection.patient })
+          .values({
+            emrPatientId: selectedEmrPatient?.id,
+            name: selectedEmrPatient?.displayName ?? collection.patient,
+          })
           .returning({ id: customers.id })
       )[0]?.id;
 

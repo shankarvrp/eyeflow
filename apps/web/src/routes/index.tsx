@@ -29,6 +29,7 @@ import {
   type RecentCollection,
   type TargetProgress,
 } from "../features/dashboard/dashboard-data";
+import { getEmrPatientOptions } from "../features/emr/emr.functions";
 import { AddCollectionDialog } from "../features/revenue/add-collection-dialog";
 import { type DashboardQuery, shiftDateKey } from "../features/revenue/collection-query";
 import type {
@@ -101,6 +102,10 @@ function Dashboard() {
     setTargets(updatedDashboard.targets);
     setPagination(updatedDashboard.pagination);
   }, []);
+  const loadEmrPatientOptions = useCallback(
+    (appointmentDate: string) => getEmrPatientOptions({ data: { appointmentDate } }),
+    [],
+  );
 
   useEffect(() => setReady(true), []);
 
@@ -321,6 +326,7 @@ function Dashboard() {
                         ? "bg-emerald-400/15 text-emerald-300"
                         : "bg-white/10 text-slate-300 hover:bg-white/15",
                     )}
+                    disabled={!ready}
                     onClick={() => setLiveEnabled((current) => !current)}
                     type="button"
                   >
@@ -700,6 +706,7 @@ function Dashboard() {
         defaultOccurredOn={
           isAdmin && query.from === query.to ? query.from : initialDashboardQuery.from
         }
+        loadPatientOptions={loadEmrPatientOptions}
         onAdd={addCollection}
         onOpenChange={setAddCollectionOpen}
         open={addCollectionOpen}

@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -10,6 +11,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -91,15 +93,60 @@ export const departments = pgTable("departments", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const emrPatients = pgTable(
+  "emr_patients",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    source: text("source").notNull().default("foss"),
+    externalPatientId: text("external_patient_id").notNull(),
+    displayName: text("display_name").notNull(),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("emr_patients_source_external_id_uidx").on(table.source, table.externalPatientId),
+  ],
+);
+
+export const emrAppointments = pgTable(
+  "emr_appointments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    source: text("source").notNull().default("foss"),
+    externalAppointmentId: text("external_appointment_id").notNull(),
+    emrPatientId: uuid("emr_patient_id")
+      .notNull()
+      .references(() => emrPatients.id, { onDelete: "cascade" }),
+    appointmentDate: date("appointment_date").notNull(),
+    visitType: text("visit_type"),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("emr_appointments_source_external_id_uidx").on(
+      table.source,
+      table.externalAppointmentId,
+    ),
+    index("emr_appointments_date_idx").on(table.appointmentDate),
+    index("emr_appointments_patient_idx").on(table.emrPatientId),
+  ],
+);
+
 export const customers = pgTable(
   "customers",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    emrPatientId: uuid("emr_patient_id").references(() => emrPatients.id),
     name: text("name").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("customers_name_idx").on(table.name)],
+  (table) => [
+    uniqueIndex("customers_emr_patient_id_uidx").on(table.emrPatientId),
+    index("customers_name_idx").on(table.name),
+  ],
 );
 
 export const payments = pgTable(
@@ -179,6 +226,16 @@ export const accountRelations = relations(account, ({ one }) => ({
   user: one(user, { fields: [account.userId], references: [user.id] }),
 }));
 export const customerRelations = relations(customers, ({ many }) => ({ payments: many(payments) }));
+export const emrPatientRelations = relations(emrPatients, ({ many, one }) => ({
+  appointments: many(emrAppointments),
+  customer: one(customers, { fields: [emrPatients.id], references: [customers.emrPatientId] }),
+}));
+export const emrAppointmentRelations = relations(emrAppointments, ({ one }) => ({
+  patient: one(emrPatients, {
+    fields: [emrAppointments.emrPatientId],
+    references: [emrPatients.id],
+  }),
+}));
 export const departmentRelations = relations(departments, ({ many }) => ({
   access: many(userDepartmentAccess),
   payments: many(payments),

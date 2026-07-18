@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiLiveCollectionsRouteImport } from './routes/api/live/collections'
 import { Route as ApiExportsCollectionsRouteImport } from './routes/api/exports/collections'
+import { Route as ApiEmrImportRouteImport } from './routes/api/emr/import'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const LoginRoute = LoginRouteImport.update({
@@ -35,6 +36,11 @@ const ApiExportsCollectionsRoute = ApiExportsCollectionsRouteImport.update({
   path: '/api/exports/collections',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEmrImportRoute = ApiEmrImportRouteImport.update({
+  id: '/api/emr/import',
+  path: '/api/emr/import',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/emr/import': typeof ApiEmrImportRoute
   '/api/exports/collections': typeof ApiExportsCollectionsRoute
   '/api/live/collections': typeof ApiLiveCollectionsRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/emr/import': typeof ApiEmrImportRoute
   '/api/exports/collections': typeof ApiExportsCollectionsRoute
   '/api/live/collections': typeof ApiLiveCollectionsRoute
 }
@@ -60,6 +68,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/emr/import': typeof ApiEmrImportRoute
   '/api/exports/collections': typeof ApiExportsCollectionsRoute
   '/api/live/collections': typeof ApiLiveCollectionsRoute
 }
@@ -69,6 +78,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/api/auth/$'
+    | '/api/emr/import'
     | '/api/exports/collections'
     | '/api/live/collections'
   fileRoutesByTo: FileRoutesByTo
@@ -76,6 +86,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/api/auth/$'
+    | '/api/emr/import'
     | '/api/exports/collections'
     | '/api/live/collections'
   id:
@@ -83,6 +94,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/api/auth/$'
+    | '/api/emr/import'
     | '/api/exports/collections'
     | '/api/live/collections'
   fileRoutesById: FileRoutesById
@@ -91,6 +103,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiEmrImportRoute: typeof ApiEmrImportRoute
   ApiExportsCollectionsRoute: typeof ApiExportsCollectionsRoute
   ApiLiveCollectionsRoute: typeof ApiLiveCollectionsRoute
 }
@@ -125,6 +138,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiExportsCollectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/emr/import': {
+      id: '/api/emr/import'
+      path: '/api/emr/import'
+      fullPath: '/api/emr/import'
+      preLoaderRoute: typeof ApiEmrImportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -139,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiEmrImportRoute: ApiEmrImportRoute,
   ApiExportsCollectionsRoute: ApiExportsCollectionsRoute,
   ApiLiveCollectionsRoute: ApiLiveCollectionsRoute,
 }

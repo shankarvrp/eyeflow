@@ -47,6 +47,12 @@ Better Auth is the authentication foundation. The web server owns the Drizzle ad
 
 Patient and payment mutations will require an append-only audit event. Logs must avoid patient names, payment details, tokens, and raw request bodies.
 
+The FOSS EHR connector is a local browser-automation boundary. Its persistent profile contains a
+sensitive authenticated session and must remain outside Git and container images. Synchronization
+uses stable EMR patient and appointment identifiers, imports the minimum operational fields, and
+does not persist phone numbers or clinical content. UI selectors are integration contracts and
+must be covered by parser tests because the upstream product does not provide a supported API.
+
 ## Testing strategy
 
 - Vitest covers domain rules, schemas, and focused component behavior.
