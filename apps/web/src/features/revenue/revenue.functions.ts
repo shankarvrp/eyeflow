@@ -110,6 +110,8 @@ export const updateCollection = createServerFn({ method: "POST" })
 export const updatePatientWorkspace = createServerFn({ method: "POST" })
   .validator(patientWorkspaceUpdateSchema)
   .handler(async ({ data }) => {
+    const session = await requireRevenuePermission("read");
+    const isAdmin = isAdminRole(session.user.role);
     const collectionIds = data.collections.map((collection) => collection.id);
     const storedCollections = await findPatientCollectionsForAuthorization(
       data.customerId,
@@ -119,35 +121,52 @@ export const updatePatientWorkspace = createServerFn({ method: "POST" })
       throw new Response("One or more patient collections were not found.", { status: 404 });
     }
 
-    const hasHistoricalCollection = storedCollections.some(
-      (collection) => !isTodayInClinicTime(collection.occurredAt),
-    );
-    const action = hasHistoricalCollection ? "edit-history" : "edit-current";
-    const session = await requireRevenuePermission(action);
-    const requestedCollections = new Map(
-      data.collections.map((collection) => [collection.id, collection]),
-    );
+    if (storedCollections.length > 0) {
+      const hasHistoricalCollection = storedCollections.some(
+        (collection) => !isTodayInClinicTime(collection.occurredAt),
+      );
+      const action = hasHistoricalCollection ? "edit-history" : "edit-current";
+      await requireRevenuePermission(action);
+      const requestedCollections = new Map(
+        data.collections.map((collection) => [collection.id, collection]),
+      );
 
-    await Promise.all(
-      storedCollections.flatMap((stored) => {
-        const requested = requestedCollections.get(stored.id);
-        if (!requested) return [];
-        return [
-          requireDepartmentPermission(
+      await Promise.all(
+        storedCollections.flatMap((stored) => {
+          const requested = requestedCollections.get(stored.id);
+          if (!requested) return [];
+          return [
+            requireDepartmentPermission(
+              session.user.id,
+              stored.department,
+              action,
+              session.user.role,
+            ),
+            requireDepartmentPermission(
+              session.user.id,
+              requested.department,
+              action,
+              session.user.role,
+            ),
+          ];
+        }),
+      );
+    }
+
+    if (data.newCollections.length > 0) {
+      await requireRevenuePermission("create");
+      await Promise.all(
+        data.newCollections.map((collection) => {
+          validateCollectionDate(collection.occurredOn, isAdmin);
+          return requireDepartmentPermission(
             session.user.id,
-            stored.department,
-            action,
+            collection.department,
+            "create",
             session.user.role,
-          ),
-          requireDepartmentPermission(
-            session.user.id,
-            requested.department,
-            action,
-            session.user.role,
-          ),
-        ];
-      }),
-    );
+          );
+        }),
+      );
+    }
 
     const accessibleDepartments = await getAccessibleDepartments(
       session.user.id,
@@ -157,7 +176,7 @@ export const updatePatientWorkspace = createServerFn({ method: "POST" })
       data,
       session.user.id,
       accessibleDepartments,
-      isAdminRole(session.user.role),
+      isAdmin,
     );
     publishCollectionChanged();
     return dashboard;

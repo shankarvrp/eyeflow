@@ -8,19 +8,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@eyeflow/ui";
-import { Check, Eye, IndianRupee, LockKeyhole } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Check, Eye, IndianRupee, LockKeyhole, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PatientCollectionSummary, RecentCollection } from "../dashboard/dashboard-data";
 import {
   creditProviders,
+  emptyPaymentLine,
   onlineModes,
   type PatientCollectionUpdate,
+  type PatientNewCollection,
   type PatientWorkspaceUpdate,
   patientWorkspaceUpdateSchema,
 } from "./collection-schema";
 
 interface PatientWorkspaceDialogProps {
   allowedDepartments: readonly DepartmentName[];
+  canChooseDate: boolean;
+  defaultOccurredOn: string;
   onOpenChange: (open: boolean) => void;
   onSave: (workspace: PatientWorkspaceUpdate) => Promise<void>;
   open: boolean;
@@ -32,6 +36,10 @@ interface EditableCollection extends PatientCollectionUpdate {
   occurredAt: string;
 }
 
+interface NewEditableCollection extends PatientNewCollection {
+  key: string;
+}
+
 const modeValues = {
   Cash: "cash",
   Credit: "credit",
@@ -40,13 +48,17 @@ const modeValues = {
 
 export function PatientWorkspaceDialog({
   allowedDepartments,
+  canChooseDate,
+  defaultOccurredOn,
   onOpenChange,
   onSave,
   open,
   workspace,
 }: PatientWorkspaceDialogProps) {
+  const nextKey = useRef(0);
   const [patient, setPatient] = useState("");
   const [collections, setCollections] = useState<EditableCollection[]>([]);
+  const [newCollections, setNewCollections] = useState<NewEditableCollection[]>([]);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string>();
@@ -55,6 +67,7 @@ export function PatientWorkspaceDialog({
     if (!workspace) return;
     setPatient(workspace.patient);
     setCollections(workspace.collections.map(toEditableCollection));
+    setNewCollections([]);
     setReason("");
     setSubmitError(undefined);
   }, [workspace]);
@@ -63,10 +76,10 @@ export function PatientWorkspaceDialog({
     () => collections.filter((collection) => collection.canEdit),
     [collections],
   );
-  const total = collections.reduce(
-    (sum, collection) => sum + collection.amount - collection.discount,
-    0,
-  );
+  const total =
+    collections.reduce((sum, collection) => sum + collection.amount - collection.discount, 0) +
+    newCollections.reduce((sum, collection) => sum + collection.amount - collection.discount, 0);
+  const canSave = editableCollections.length > 0 || newCollections.length > 0;
 
   const updateCollection = (
     id: string,
@@ -77,6 +90,27 @@ export function PatientWorkspaceDialog({
     );
   };
 
+  const addCollection = (department: DepartmentName) => {
+    nextKey.current += 1;
+    setNewCollections((current) => [
+      ...current,
+      {
+        ...emptyPaymentLine(department),
+        key: `new-${nextKey.current}`,
+        occurredOn: defaultOccurredOn,
+      },
+    ]);
+  };
+
+  const updateNewCollection = (
+    key: string,
+    update: (collection: NewEditableCollection) => NewEditableCollection,
+  ) => {
+    setNewCollections((current) =>
+      current.map((collection) => (collection.key === key ? update(collection) : collection)),
+    );
+  };
+
   const submit = async () => {
     if (!workspace) return;
     const parsed = patientWorkspaceUpdateSchema.safeParse({
@@ -84,6 +118,7 @@ export function PatientWorkspaceDialog({
         ({ canEdit: _canEdit, occurredAt: _occurredAt, ...row }) => row,
       ),
       customerId: workspace.customerId,
+      newCollections: newCollections.map(({ key: _key, ...collection }) => collection),
       patient,
       reason,
     });
@@ -140,6 +175,24 @@ export function PatientWorkspaceDialog({
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
+            <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--subtle-panel)] px-4 py-3">
+              <span className="mr-1 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+                Add payment
+              </span>
+              {allowedDepartments.map((department) => (
+                <Button
+                  aria-label={`Add ${department} payment to patient`}
+                  key={department}
+                  onClick={() => addCollection(department)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <Plus size={14} />
+                  {department}
+                </Button>
+              ))}
+            </div>
             <table className="w-full min-w-[1000px] text-left">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--subtle-panel)] text-xs uppercase tracking-wider text-[var(--muted)]">
@@ -247,11 +300,26 @@ export function PatientWorkspaceDialog({
                     </tr>
                   );
                 })}
+                {newCollections.map((collection) => (
+                  <NewCollectionRow
+                    allowedDepartments={allowedDepartments}
+                    canChooseDate={canChooseDate}
+                    collection={collection}
+                    key={collection.key}
+                    onRemove={() =>
+                      setNewCollections((current) =>
+                        current.filter((item) => item.key !== collection.key),
+                      )
+                    }
+                    onUpdate={updateNewCollection}
+                    patient={workspace?.patient ?? "Patient"}
+                  />
+                ))}
               </tbody>
             </table>
           </div>
 
-          {editableCollections.length > 0 ? (
+          {canSave ? (
             <label>
               <span className="form-label">Reason for changes</span>
               <input
@@ -279,7 +347,7 @@ export function PatientWorkspaceDialog({
                 Close
               </Button>
             </DialogClose>
-            {editableCollections.length > 0 ? (
+            {canSave ? (
               <Button disabled={submitting} type="submit">
                 <Check size={17} />
                 {submitting ? "Saving…" : "Save patient changes"}
@@ -303,6 +371,150 @@ function toEditableCollection(collection: RecentCollection): EditableCollection 
     occurredAt: collection.occurredAt,
     providerOrMode: collection.providerOrMode,
   };
+}
+
+function NewCollectionRow({
+  allowedDepartments,
+  canChooseDate,
+  collection,
+  onRemove,
+  onUpdate,
+  patient,
+}: {
+  allowedDepartments: readonly DepartmentName[];
+  canChooseDate: boolean;
+  collection: NewEditableCollection;
+  onRemove: () => void;
+  onUpdate: (
+    key: string,
+    update: (collection: NewEditableCollection) => NewEditableCollection,
+  ) => void;
+  patient: string;
+}) {
+  const options = collection.mode === "credit" ? creditProviders : onlineModes;
+  const update = (change: Partial<NewEditableCollection>) =>
+    onUpdate(collection.key, (current) => ({ ...current, ...change }));
+
+  return (
+    <tr className="border-b border-emerald-500/20 bg-emerald-500/[0.04] last:border-0">
+      <td className="px-4 py-3">
+        <input
+          aria-label={`${patient} new payment date ${collection.key}`}
+          className="form-control min-w-36"
+          disabled={!canChooseDate}
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={(event) => update({ occurredOn: event.target.value })}
+          type="date"
+          value={collection.occurredOn}
+        />
+        <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+          <Plus size={12} /> New payment
+        </span>
+      </td>
+      <td className="px-3 py-3">
+        <select
+          aria-label={`${patient} new department ${collection.key}`}
+          className="form-control min-w-36"
+          onChange={(event) => update({ department: event.target.value as DepartmentName })}
+          value={collection.department}
+        >
+          {allowedDepartments.map((department) => (
+            <option key={department}>{department}</option>
+          ))}
+        </select>
+      </td>
+      <td className="px-3 py-3">
+        <select
+          aria-label={`${patient} new payment mode ${collection.key}`}
+          className="form-control min-w-28"
+          onChange={(event) =>
+            update({
+              mode: event.target.value as PatientNewCollection["mode"],
+              providerOrMode: event.target.value === "cash" ? null : "",
+            })
+          }
+          value={collection.mode}
+        >
+          <option value="cash">Cash</option>
+          <option value="credit">Credit</option>
+          <option value="online">Online</option>
+        </select>
+      </td>
+      <td className="px-3 py-3">
+        {collection.mode === "cash" ? (
+          <span className="px-3 text-sm text-[var(--muted)]">Not required</span>
+        ) : (
+          <select
+            aria-label={`${patient} new provider or mode ${collection.key}`}
+            className="form-control min-w-36"
+            onChange={(event) => update({ providerOrMode: event.target.value || null })}
+            value={collection.providerOrMode ?? ""}
+          >
+            <option value="">Select</option>
+            {options.map((option) => (
+              <option key={option}>{option}</option>
+            ))}
+          </select>
+        )}
+      </td>
+      <td className="px-3 py-3">
+        <NewMoneyInput
+          label={`${patient} new amount ${collection.key}`}
+          onChange={(amount) => update({ amount })}
+          value={collection.amount}
+        />
+      </td>
+      <td className="px-3 py-3">
+        <NewMoneyInput
+          label={`${patient} new discount ${collection.key}`}
+          onChange={(discount) => update({ discount })}
+          value={collection.discount}
+        />
+      </td>
+      <td className="px-4 py-3 text-right">
+        <p className="text-sm font-bold">
+          {formatCurrency(collection.amount - collection.discount)}
+        </p>
+        <Button
+          aria-label={`Remove ${collection.department} new payment`}
+          onClick={onRemove}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <Trash2 size={14} /> Remove
+        </Button>
+      </td>
+    </tr>
+  );
+}
+
+function NewMoneyInput({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  return (
+    <div className="relative min-w-28">
+      <IndianRupee
+        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+        size={14}
+      />
+      <input
+        aria-label={label}
+        className="form-control pl-8"
+        min="0"
+        onChange={(event) => onChange(Math.max(0, Number(event.target.value || 0)))}
+        step="0.01"
+        type="number"
+        value={value}
+      />
+    </div>
+  );
 }
 
 function MoneyInput({

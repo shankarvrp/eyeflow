@@ -378,7 +378,9 @@ export async function updatePatientWorkspace(
       .where(
         inArray(
           departments.name,
-          workspace.collections.map((collection) => collection.department),
+          [...workspace.collections, ...workspace.newCollections].map(
+            (collection) => collection.department,
+          ),
         ),
       );
     const departmentIds = new Map(
@@ -401,11 +403,27 @@ export async function updatePatientWorkspace(
         .where(eq(payments.id, collection.id));
     }
 
+    for (const collection of workspace.newCollections) {
+      const departmentId = departmentIds.get(collection.department);
+      if (!departmentId) throw new Error(`Department is not configured: ${collection.department}`);
+      await transaction.insert(payments).values({
+        amount: collection.amount.toFixed(2),
+        createdByUserId: actorUserId,
+        customerId: workspace.customerId,
+        departmentId,
+        discount: collection.discount.toFixed(2),
+        kind: collection.mode,
+        occurredAt: collectionTimestamp(collection.occurredOn),
+        providerOrMode: collection.mode === "cash" ? null : collection.providerOrMode,
+      });
+    }
+
     await transaction.insert(auditEvents).values({
       action: "patient-collections.updated",
       actorUserId,
       after: {
         collections: workspace.collections,
+        newCollections: workspace.newCollections,
         patient: workspace.patient,
       },
       before: {

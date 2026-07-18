@@ -41,8 +41,13 @@ export function AddCollectionDialog({
   open,
 }: AddCollectionDialogProps) {
   const nextKey = useRef(0);
+  const primaryDepartments = allowedDepartments.filter(
+    (department) => department === "OPD" || department === "Pharmacy",
+  );
+  const initialDepartments =
+    primaryDepartments.length > 0 ? primaryDepartments : allowedDepartments.slice(0, 1);
   const createRows = () =>
-    allowedDepartments.flatMap((department) => [
+    initialDepartments.flatMap((department) => [
       { ...emptyPaymentLine(department), key: `${department}-initial` },
     ]);
   const [patient, setPatient] = useState("");
@@ -56,6 +61,12 @@ export function AddCollectionDialog({
   }, [defaultOccurredOn, open]);
 
   const populatedRows = rows.filter((row) => row.amount > 0);
+  const activeDepartments = allowedDepartments.filter((department) =>
+    rows.some((row) => row.department === department),
+  );
+  const availableDepartments = allowedDepartments.filter(
+    (department) => !activeDepartments.includes(department),
+  );
   const totals = useMemo(
     () =>
       populatedRows.reduce(
@@ -87,6 +98,8 @@ export function AddCollectionDialog({
       { ...emptyPaymentLine(department), key: `${department}-${nextKey.current}` },
     ]);
   };
+
+  const addDepartment = (department: DepartmentName) => addPayment(department);
 
   const removePayment = (key: string, department: DepartmentName) => {
     setRows((current) => {
@@ -185,7 +198,27 @@ export function AddCollectionDialog({
           </div>
 
           <div className="space-y-3">
-            {allowedDepartments.map((department) => {
+            {availableDepartments.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--subtle-panel)] px-4 py-3">
+                <span className="mr-1 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+                  Add department
+                </span>
+                {availableDepartments.map((department) => (
+                  <Button
+                    aria-label={`Add ${department} department`}
+                    key={department}
+                    onClick={() => addDepartment(department)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Plus size={14} />
+                    {department}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+            {activeDepartments.map((department) => {
               const departmentRows = rows.filter((row) => row.department === department);
               const departmentTotal = departmentRows.reduce(
                 (sum, row) => sum + row.amount - row.discount,

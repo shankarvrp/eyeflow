@@ -65,12 +65,21 @@ export const patientCollectionUpdateSchema = z
     path: ["providerOrMode"],
   });
 
+export const patientNewCollectionSchema = newPaymentLineSchema.safeExtend({
+  occurredOn: isoDateSchema,
+});
+
 export const patientWorkspaceUpdateSchema = z
   .object({
-    collections: z.array(patientCollectionUpdateSchema).min(1),
+    collections: z.array(patientCollectionUpdateSchema),
     customerId: z.string().uuid(),
+    newCollections: z.array(patientNewCollectionSchema),
     patient: z.string().trim().min(2).max(120),
     reason: z.string().trim().min(3).max(240),
+  })
+  .refine((value) => value.collections.length + value.newCollections.length > 0, {
+    message: "Add or update at least one collection",
+    path: ["collections"],
   })
   .refine(
     (value) =>
@@ -81,6 +90,7 @@ export const patientWorkspaceUpdateSchema = z
 
 export type PatientWorkspaceUpdate = z.infer<typeof patientWorkspaceUpdateSchema>;
 export type PatientCollectionUpdate = z.infer<typeof patientCollectionUpdateSchema>;
+export type PatientNewCollection = z.infer<typeof patientNewCollectionSchema>;
 
 export function emptyPaymentLine(department: DepartmentName): NewPaymentLine {
   return {

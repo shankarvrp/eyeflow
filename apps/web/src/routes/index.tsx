@@ -715,6 +715,10 @@ function Dashboard() {
       />
       <PatientWorkspaceDialog
         allowedDepartments={departments.map((department) => department.name)}
+        canChooseDate={isAdmin}
+        defaultOccurredOn={
+          isAdmin && query.from === query.to ? query.from : initialDashboardQuery.from
+        }
         onOpenChange={(open) => {
           setPatientWorkspaceOpen(open);
           if (!open) setSelectedPatient(null);

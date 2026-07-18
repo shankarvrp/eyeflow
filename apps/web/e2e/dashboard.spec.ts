@@ -65,6 +65,7 @@ test("adds collections for multiple departments in one save", async ({ page }) =
   await page.getByRole("spinbutton", { name: "OPD payment 1 amount" }).fill("500");
   await page.getByRole("button", { name: "Add OPD payment" }).click();
   await page.getByRole("spinbutton", { name: "OPD payment 2 amount" }).fill("700");
+  await page.getByRole("button", { name: "Add Investigation department" }).click();
   await page.getByLabel("Investigation payment 1 mode").selectOption("online");
   await page.getByRole("spinbutton", { name: "Investigation payment 1 amount" }).fill("2500");
   await page.getByLabel("Investigation payment 1 provider or mode").selectOption("UPI");
@@ -89,9 +90,14 @@ test("adds collections for multiple departments in one save", async ({ page }) =
     .getByRole("spinbutton", { name: /^Patient amount/ })
     .first()
     .fill("3000");
+  await page.getByRole("button", { name: "Add Opticals payment to patient" }).click();
+  await page.getByRole("spinbutton", { name: `${patientName} new amount new-1` }).fill("800");
   await page.getByLabel("Reason for changes").fill("Corrected patient payment details");
   await page.getByRole("button", { name: "Save patient changes" }).click();
   await expect(page.getByText(updatedPatientName, { exact: true })).toBeVisible();
+  const updatedPatientRow = page.getByRole("row").filter({ hasText: updatedPatientName });
+  await expect(updatedPatientRow.getByText("4", { exact: true })).toBeVisible();
+  await expect(updatedPatientRow.getByText("Opticals", { exact: true })).toBeVisible();
 });
 
 test("normal users see only daily targets and can edit today's collections", async ({ page }) => {

@@ -101,6 +101,7 @@ describe("patientWorkspaceUpdateSchema", () => {
         },
       ],
       customerId: "56a9a5c2-e885-44a9-a77d-aabb7db984a3",
+      newCollections: [],
       patient: "Anita Rao",
       reason: "Corrected payment entry",
     });
@@ -121,9 +122,31 @@ describe("patientWorkspaceUpdateSchema", () => {
       patientWorkspaceUpdateSchema.safeParse({
         collections: [collection, collection],
         customerId: "56a9a5c2-e885-44a9-a77d-aabb7db984a3",
+        newCollections: [],
         patient: "Anita Rao",
         reason: "Corrected payment entry",
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts a new department payment from the patient workspace", () => {
+    const result = patientWorkspaceUpdateSchema.safeParse({
+      collections: [],
+      customerId: "56a9a5c2-e885-44a9-a77d-aabb7db984a3",
+      newCollections: [
+        {
+          amount: 1500,
+          department: "Opticals",
+          discount: 0,
+          mode: "online",
+          occurredOn: "2026-07-18",
+          providerOrMode: "UPI",
+        },
+      ],
+      patient: "Anita Rao",
+      reason: "Added optical payment",
+    });
+
+    expect(result.success).toBe(true);
   });
 });
