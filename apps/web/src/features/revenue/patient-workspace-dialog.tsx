@@ -80,6 +80,14 @@ export function PatientWorkspaceDialog({
     collections.reduce((sum, collection) => sum + collection.amount - collection.discount, 0) +
     newCollections.reduce((sum, collection) => sum + collection.amount - collection.discount, 0);
   const canSave = editableCollections.length > 0 || newCollections.length > 0;
+  const activeDepartments = allowedDepartments.filter(
+    (department) =>
+      collections.some((collection) => collection.department === department) ||
+      newCollections.some((collection) => collection.department === department),
+  );
+  const availableDepartments = allowedDepartments.filter(
+    (department) => !activeDepartments.includes(department),
+  );
 
   const updateCollection = (
     id: string,
@@ -174,149 +182,104 @@ export function PatientWorkspaceDialog({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
-            <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--subtle-panel)] px-4 py-3">
-              <span className="mr-1 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
-                Add payment
-              </span>
-              {allowedDepartments.map((department) => (
-                <Button
-                  aria-label={`Add ${department} payment to patient`}
-                  key={department}
-                  onClick={() => addCollection(department)}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <Plus size={14} />
-                  {department}
-                </Button>
-              ))}
-            </div>
-            <table className="w-full min-w-[1000px] text-left">
-              <thead>
-                <tr className="border-b border-[var(--border)] bg-[var(--subtle-panel)] text-xs uppercase tracking-wider text-[var(--muted)]">
-                  <th className="px-4 py-3 font-semibold">Date / status</th>
-                  <th className="px-3 py-3 font-semibold">Department</th>
-                  <th className="px-3 py-3 font-semibold">Mode</th>
-                  <th className="px-3 py-3 font-semibold">Provider / mode</th>
-                  <th className="px-3 py-3 font-semibold">Gross</th>
-                  <th className="px-3 py-3 font-semibold">Discount</th>
-                  <th className="px-4 py-3 text-right font-semibold">Final</th>
-                </tr>
-              </thead>
-              <tbody>
-                {collections.map((collection) => {
-                  const options = collection.mode === "credit" ? creditProviders : onlineModes;
-                  return (
-                    <tr
-                      className="border-b border-[var(--border)] last:border-0"
-                      key={collection.id}
-                    >
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-medium">{formatDate(collection.occurredAt)}</p>
-                        <span className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--muted)]">
-                          {collection.canEdit ? <Eye size={12} /> : <LockKeyhole size={12} />}
-                          {collection.canEdit ? "Editable" : "Locked"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <select
-                          aria-label={`${workspace?.patient ?? "Patient"} department ${collection.id}`}
-                          className="form-control min-w-36"
-                          disabled={!collection.canEdit}
-                          onChange={(event) =>
-                            updateCollection(collection.id, (current) => ({
-                              ...current,
-                              department: event.target.value as DepartmentName,
-                            }))
-                          }
-                          value={collection.department}
-                        >
-                          {allowedDepartments.map((department) => (
-                            <option key={department}>{department}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-3">
-                        <select
-                          aria-label={`${workspace?.patient ?? "Patient"} payment mode ${collection.id}`}
-                          className="form-control min-w-28"
-                          disabled={!collection.canEdit}
-                          onChange={(event) =>
-                            updateCollection(collection.id, (current) => ({
-                              ...current,
-                              mode: event.target.value as PatientCollectionUpdate["mode"],
-                              providerOrMode: event.target.value === "cash" ? null : "",
-                            }))
-                          }
-                          value={collection.mode}
-                        >
-                          <option value="cash">Cash</option>
-                          <option value="credit">Credit</option>
-                          <option value="online">Online</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-3">
-                        {collection.mode === "cash" ? (
-                          <span className="px-3 text-sm text-[var(--muted)]">Not required</span>
-                        ) : (
-                          <select
-                            aria-label={`${workspace?.patient ?? "Patient"} provider or mode ${collection.id}`}
-                            className="form-control min-w-36"
-                            disabled={!collection.canEdit}
-                            onChange={(event) =>
-                              updateCollection(collection.id, (current) => ({
-                                ...current,
-                                providerOrMode: event.target.value || null,
-                              }))
-                            }
-                            value={collection.providerOrMode ?? ""}
-                          >
-                            <option value="">Select</option>
-                            {options.map((option) => (
-                              <option key={option}>{option}</option>
-                            ))}
-                          </select>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <MoneyInput
-                          collection={collection}
-                          field="amount"
-                          onChange={updateCollection}
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <MoneyInput
-                          collection={collection}
-                          field="discount"
-                          onChange={updateCollection}
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold">
-                        {formatCurrency(collection.amount - collection.discount)}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {newCollections.map((collection) => (
-                  <NewCollectionRow
-                    allowedDepartments={allowedDepartments}
-                    canChooseDate={canChooseDate}
-                    collection={collection}
-                    key={collection.key}
-                    onRemove={() =>
-                      setNewCollections((current) =>
-                        current.filter((item) => item.key !== collection.key),
-                      )
-                    }
-                    onUpdate={updateNewCollection}
-                    patient={workspace?.patient ?? "Patient"}
-                  />
+          <div className="space-y-3">
+            {availableDepartments.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--subtle-panel)] px-4 py-3">
+                <span className="mr-1 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+                  Add department
+                </span>
+                {availableDepartments.map((department) => (
+                  <Button
+                    aria-label={`Add ${department} department to patient`}
+                    key={department}
+                    onClick={() => addCollection(department)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Plus size={14} />
+                    {department}
+                  </Button>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            ) : null}
+
+            {activeDepartments.map((department) => {
+              const existingRows = collections.filter(
+                (collection) => collection.department === department,
+              );
+              const newRows = newCollections.filter(
+                (collection) => collection.department === department,
+              );
+              const departmentTotal = [...existingRows, ...newRows].reduce(
+                (sum, collection) => sum + collection.amount - collection.discount,
+                0,
+              );
+
+              return (
+                <section
+                  className="overflow-hidden rounded-2xl border border-[var(--border)]"
+                  key={department}
+                >
+                  <div className="flex items-center justify-between bg-[var(--subtle-panel)] px-4 py-3">
+                    <div>
+                      <h3 className="text-sm font-bold">{department}</h3>
+                      <p className="text-xs text-[var(--muted)]">
+                        {existingRows.length + newRows.length} payments ·{" "}
+                        {formatCurrency(departmentTotal)}
+                      </p>
+                    </div>
+                    <Button
+                      aria-label={`Add ${department} payment to patient`}
+                      onClick={() => addCollection(department)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Plus size={14} /> Add payment
+                    </Button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[880px] text-left">
+                      <thead>
+                        <tr className="border-y border-[var(--border)] text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                          <th className="px-4 py-2 font-semibold">Date / status</th>
+                          <th className="px-3 py-2 font-semibold">Mode</th>
+                          <th className="px-3 py-2 font-semibold">Provider / mode</th>
+                          <th className="px-3 py-2 font-semibold">Gross</th>
+                          <th className="px-3 py-2 font-semibold">Discount</th>
+                          <th className="px-4 py-2 text-right font-semibold">Final / action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {existingRows.map((collection) => (
+                          <ExistingCollectionRow
+                            collection={collection}
+                            key={collection.id}
+                            onUpdate={updateCollection}
+                            patient={workspace?.patient ?? "Patient"}
+                          />
+                        ))}
+                        {newRows.map((collection) => (
+                          <NewCollectionRow
+                            canChooseDate={canChooseDate}
+                            collection={collection}
+                            key={collection.key}
+                            onRemove={() =>
+                              setNewCollections((current) =>
+                                current.filter((item) => item.key !== collection.key),
+                              )
+                            }
+                            onUpdate={updateNewCollection}
+                            patient={workspace?.patient ?? "Patient"}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              );
+            })}
           </div>
 
           {canSave ? (
@@ -373,15 +336,87 @@ function toEditableCollection(collection: RecentCollection): EditableCollection 
   };
 }
 
+function ExistingCollectionRow({
+  collection,
+  onUpdate,
+  patient,
+}: {
+  collection: EditableCollection;
+  onUpdate: (id: string, update: (collection: EditableCollection) => EditableCollection) => void;
+  patient: string;
+}) {
+  const options = collection.mode === "credit" ? creditProviders : onlineModes;
+  return (
+    <tr className="border-b border-[var(--border)] last:border-0">
+      <td className="px-4 py-3">
+        <p className="text-sm font-medium">{formatDate(collection.occurredAt)}</p>
+        <span className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--muted)]">
+          {collection.canEdit ? <Eye size={12} /> : <LockKeyhole size={12} />}
+          {collection.canEdit ? "Editable" : "Locked"}
+        </span>
+      </td>
+      <td className="px-3 py-3">
+        <select
+          aria-label={`${patient} payment mode ${collection.id}`}
+          className="form-control min-w-28"
+          disabled={!collection.canEdit}
+          onChange={(event) =>
+            onUpdate(collection.id, (current) => ({
+              ...current,
+              mode: event.target.value as PatientCollectionUpdate["mode"],
+              providerOrMode: event.target.value === "cash" ? null : "",
+            }))
+          }
+          value={collection.mode}
+        >
+          <option value="cash">Cash</option>
+          <option value="credit">Credit</option>
+          <option value="online">Online</option>
+        </select>
+      </td>
+      <td className="px-3 py-3">
+        {collection.mode === "cash" ? (
+          <span className="px-3 text-sm text-[var(--muted)]">Not required</span>
+        ) : (
+          <select
+            aria-label={`${patient} provider or mode ${collection.id}`}
+            className="form-control min-w-36"
+            disabled={!collection.canEdit}
+            onChange={(event) =>
+              onUpdate(collection.id, (current) => ({
+                ...current,
+                providerOrMode: event.target.value || null,
+              }))
+            }
+            value={collection.providerOrMode ?? ""}
+          >
+            <option value="">Select</option>
+            {options.map((option) => (
+              <option key={option}>{option}</option>
+            ))}
+          </select>
+        )}
+      </td>
+      <td className="px-3 py-3">
+        <MoneyInput collection={collection} field="amount" onChange={onUpdate} />
+      </td>
+      <td className="px-3 py-3">
+        <MoneyInput collection={collection} field="discount" onChange={onUpdate} />
+      </td>
+      <td className="px-4 py-3 text-right text-sm font-bold">
+        {formatCurrency(collection.amount - collection.discount)}
+      </td>
+    </tr>
+  );
+}
+
 function NewCollectionRow({
-  allowedDepartments,
   canChooseDate,
   collection,
   onRemove,
   onUpdate,
   patient,
 }: {
-  allowedDepartments: readonly DepartmentName[];
   canChooseDate: boolean;
   collection: NewEditableCollection;
   onRemove: () => void;
@@ -410,18 +445,6 @@ function NewCollectionRow({
         <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
           <Plus size={12} /> New payment
         </span>
-      </td>
-      <td className="px-3 py-3">
-        <select
-          aria-label={`${patient} new department ${collection.key}`}
-          className="form-control min-w-36"
-          onChange={(event) => update({ department: event.target.value as DepartmentName })}
-          value={collection.department}
-        >
-          {allowedDepartments.map((department) => (
-            <option key={department}>{department}</option>
-          ))}
-        </select>
       </td>
       <td className="px-3 py-3">
         <select

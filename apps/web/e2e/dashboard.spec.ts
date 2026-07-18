@@ -44,7 +44,7 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await expect(page.getByText("Weekly target")).toBeVisible();
   await expect(page.getByText("Monthly target")).toBeVisible();
   await page.getByRole("button", { name: "Enable live" }).click();
-  await expect(page.getByRole("button", { name: "Live on" })).toBeVisible();
+  await expect(page.locator('button[aria-pressed="true"]')).toBeVisible();
 
   const excelDownload = page.waitForEvent("download");
   await page.getByRole("link", { name: "Excel" }).click();
@@ -90,7 +90,7 @@ test("adds collections for multiple departments in one save", async ({ page }) =
     .getByRole("spinbutton", { name: /^Patient amount/ })
     .first()
     .fill("3000");
-  await page.getByRole("button", { name: "Add Opticals payment to patient" }).click();
+  await page.getByRole("button", { name: "Add Opticals department to patient" }).click();
   await page.getByRole("spinbutton", { name: `${patientName} new amount new-1` }).fill("800");
   await page.getByLabel("Reason for changes").fill("Corrected patient payment details");
   await page.getByRole("button", { name: "Save patient changes" }).click();
