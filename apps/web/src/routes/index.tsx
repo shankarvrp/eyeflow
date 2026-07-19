@@ -14,10 +14,12 @@ import {
   FileSpreadsheet,
   FileText,
   IndianRupee,
+  Link2,
   Pencil,
   Plus,
   Radio,
   ReceiptText,
+  RefreshCw,
   Smartphone,
   Users,
 } from "lucide-react";
@@ -29,7 +31,12 @@ import {
   type RecentCollection,
   type TargetProgress,
 } from "../features/dashboard/dashboard-data";
-import { getEmrPatientOptions } from "../features/emr/emr.functions";
+import {
+  connectEmr,
+  getEmrPatientOptions,
+  getEmrSyncStatus,
+  syncEmrNow,
+} from "../features/emr/emr.functions";
 import { AddCollectionDialog } from "../features/revenue/add-collection-dialog";
 import { type DashboardQuery, shiftDateKey } from "../features/revenue/collection-query";
 import type {
@@ -49,7 +56,13 @@ import {
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
-  loader: () => getDashboardData({ data: initialDashboardQuery }),
+  loader: async () => {
+    const [dashboardData, emrStatus] = await Promise.all([
+      getDashboardData({ data: initialDashboardQuery }),
+      getEmrSyncStatus({ data: { appointmentDate: initialDashboardQuery.to } }),
+    ]);
+    return { ...dashboardData, emrStatus };
+  },
 });
 
 function Dashboard() {
@@ -76,6 +89,9 @@ function Dashboard() {
   const [liveEnabled, setLiveEnabled] = useState(false);
   const [liveStatus, setLiveStatus] = useState<"connected" | "reconnecting">("reconnecting");
   const [rangeError, setRangeError] = useState<string>();
+  const [emrStatus, setEmrStatus] = useState(loaderData.emrStatus);
+  const [emrOperation, setEmrOperation] = useState<"connecting" | "idle" | "syncing">("idle");
+  const [emrMessage, setEmrMessage] = useState<string>();
   const isAdmin = loaderData.session.user.role?.split(",").includes("admin") ?? false;
   const todayLabel = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
@@ -107,7 +123,50 @@ function Dashboard() {
     [],
   );
 
+  const synchronizeEmr = useCallback(async (appointmentDate: string, scheduled = false) => {
+    try {
+      setEmrOperation("syncing");
+      if (!scheduled) setEmrMessage(undefined);
+      const status = await syncEmrNow({ data: { appointmentDate } });
+      setEmrStatus(status);
+      setEmrMessage(
+        `${status.patientCount} patient${status.patientCount === 1 ? "" : "s"} synchronized for ${appointmentDate}.`,
+      );
+    } catch (error) {
+      setEmrMessage(error instanceof Error ? error.message : "Unable to synchronize the EMR.");
+    } finally {
+      setEmrOperation("idle");
+    }
+  }, []);
+
+  const connectToEmr = useCallback(async () => {
+    try {
+      setEmrOperation("connecting");
+      setEmrMessage("Complete the EMR sign-in in the secure browser window that opened.");
+      const status = await connectEmr({
+        data: { appointmentDate: initialDashboardQuery.to },
+      });
+      setEmrStatus(status);
+      setEmrMessage(
+        `EMR connected. ${status.patientCount} patient${status.patientCount === 1 ? "" : "s"} synchronized for today.`,
+      );
+    } catch (error) {
+      setEmrMessage(error instanceof Error ? error.message : "Unable to connect the EMR.");
+    } finally {
+      setEmrOperation("idle");
+    }
+  }, []);
+
   useEffect(() => setReady(true), []);
+
+  useEffect(() => {
+    if (!ready || !emrStatus.connected) return;
+    const timer = window.setInterval(
+      () => void synchronizeEmr(initialDashboardQuery.to, true),
+      emrStatus.autoSyncIntervalMinutes * 60_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [emrStatus.autoSyncIntervalMinutes, emrStatus.connected, ready, synchronizeEmr]);
 
   useEffect(() => {
     if (!isAdmin || !liveEnabled) return;
@@ -193,6 +252,27 @@ function Dashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {isAdmin && !emrStatus.connected ? (
+              <Button
+                disabled={!ready || emrOperation !== "idle"}
+                onClick={() => void connectToEmr()}
+                variant="outline"
+              >
+                <Link2 size={16} />
+                {emrOperation === "connecting" ? "Waiting for EMR login…" : "Connect EMR"}
+              </Button>
+            ) : null}
+            <Button
+              disabled={!ready || !emrStatus.connected || emrOperation !== "idle"}
+              onClick={() => void synchronizeEmr(query.to)}
+              variant="outline"
+            >
+              <RefreshCw
+                className={emrOperation === "syncing" ? "animate-spin" : undefined}
+                size={16}
+              />
+              {emrOperation === "syncing" ? "Syncing patients…" : "Sync patients"}
+            </Button>
             <Button asChild variant="outline">
               <a download href={exportHref("xlsx")}>
                 <FileSpreadsheet size={16} />
@@ -211,6 +291,46 @@ function Dashboard() {
             </Button>
           </div>
         </div>
+
+        <output
+          className={cn(
+            "mb-5 flex flex-col gap-2 rounded-2xl border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between",
+            emrStatus.connected
+              ? "border-emerald-500/20 bg-emerald-500/[0.06]"
+              : "border-amber-500/25 bg-amber-500/[0.08]",
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "size-2 rounded-full",
+                emrStatus.connected ? "bg-emerald-500" : "bg-amber-500",
+              )}
+            />
+            <span className="font-semibold">
+              {emrStatus.connected ? "FOSS EHR connected" : "FOSS EHR not connected"}
+            </span>
+            <span className="text-[var(--muted-strong)]">
+              {emrStatus.connected
+                ? `${emrStatus.patientCount} patients for ${emrStatus.appointmentDate}`
+                : isAdmin
+                  ? "Connect once to enable patient synchronization."
+                  : "An administrator must connect the EMR."}
+            </span>
+          </div>
+          <div className="text-xs text-[var(--muted)]">
+            {emrStatus.lastSyncedAt
+              ? `Last synced ${new Intl.DateTimeFormat("en-IN", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }).format(new Date(emrStatus.lastSyncedAt))}`
+              : "Not synchronized yet"}
+            {emrStatus.connected
+              ? ` · Auto-sync every ${emrStatus.autoSyncIntervalMinutes} minutes while EyeFlow is open`
+              : ""}
+          </div>
+          {emrMessage ? <p className="basis-full text-xs font-medium">{emrMessage}</p> : null}
+        </output>
 
         <div className="panel mb-5 flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex flex-wrap items-end gap-2">

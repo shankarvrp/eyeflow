@@ -1,6 +1,6 @@
 import { createDatabase } from "@eyeflow/db";
 import { auditEvents, customers, emrAppointments, emrPatients } from "@eyeflow/db/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, countDistinct, eq, max } from "drizzle-orm";
 
 let database: ReturnType<typeof createDatabase> | undefined;
 
@@ -27,10 +27,26 @@ export interface EmrAppointmentImport {
   visitType: string | null;
 }
 
+export interface EmrSyncStatus {
+  appointmentDate: string;
+  autoSyncIntervalMinutes: number;
+  connected: boolean;
+  lastSyncedAt: string | null;
+  patientCount: number;
+}
+
+export function emrAutoSyncIntervalMinutes(): number {
+  const configured = Number(process.env.EMR_SYNC_INTERVAL_MINUTES ?? "15");
+  if (!Number.isFinite(configured)) return 15;
+  return Math.min(1_440, Math.max(1, Math.round(configured)));
+}
+
 export async function importEmrAppointments(
   records: EmrAppointmentImport[],
   actorUserId: string,
+  appointmentDate = records[0]?.appointmentDate,
 ): Promise<number> {
+  if (!appointmentDate) return 0;
   const db = getDatabase();
   await db.transaction(async (transaction) => {
     for (const record of records) {
@@ -76,14 +92,50 @@ export async function importEmrAppointments(
     await transaction.insert(auditEvents).values({
       action: "emr.sync.completed",
       actorUserId,
-      after: { appointmentDate: records[0]?.appointmentDate ?? null, recordCount: records.length },
+      after: { appointmentDate, recordCount: records.length },
       before: {},
-      entityId: records[0]?.appointmentDate ?? "unknown",
+      entityId: appointmentDate,
       entityType: "emr-sync",
       reason: "Authorized FOSS EHR patient appointment synchronization",
     });
   });
   return records.length;
+}
+
+export async function readEmrSyncStatus(
+  appointmentDate: string,
+  connected: boolean,
+): Promise<EmrSyncStatus> {
+  const db = getDatabase();
+  const [[summary], [sync]] = await Promise.all([
+    db
+      .select({ patientCount: countDistinct(emrAppointments.emrPatientId) })
+      .from(emrAppointments)
+      .where(
+        and(
+          eq(emrAppointments.source, "foss"),
+          eq(emrAppointments.appointmentDate, appointmentDate),
+        ),
+      ),
+    db
+      .select({ lastSyncedAt: max(auditEvents.createdAt) })
+      .from(auditEvents)
+      .where(
+        and(
+          eq(auditEvents.action, "emr.sync.completed"),
+          eq(auditEvents.entityType, "emr-sync"),
+          eq(auditEvents.entityId, appointmentDate),
+        ),
+      ),
+  ]);
+
+  return {
+    appointmentDate,
+    autoSyncIntervalMinutes: emrAutoSyncIntervalMinutes(),
+    connected,
+    lastSyncedAt: sync?.lastSyncedAt?.toISOString() ?? null,
+    patientCount: Number(summary?.patientCount ?? 0),
+  };
 }
 
 export async function readEmrPatientOptions(appointmentDate: string): Promise<EmrPatientOption[]> {

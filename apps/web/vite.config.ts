@@ -11,7 +11,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     envDir,
+    optimizeDeps: { exclude: ["playwright"] },
     resolve: { tsconfigPaths: true },
+    ssr: { external: ["playwright"] },
     plugins: [tailwindcss(), tanstackStart(), viteReact()],
   };
 });

@@ -64,26 +64,33 @@ docker compose up --build
 | `pnpm db:migrate` | Apply pending migrations |
 | `pnpm db:seed` | Seed departments, demo collections, and development admin/user accounts |
 | `pnpm db:studio` | Open Drizzle Studio |
-| `pnpm emr:login` | Open a private local browser profile and establish the FOSS EHR session |
-| `pnpm emr:sync [YYYY-MM-DD]` | Synchronize patient appointments for today or an explicit date |
+| `pnpm emr:login` | Fallback: establish the FOSS EHR session from a terminal |
+| `pnpm emr:sync [YYYY-MM-DD]` | Fallback: synchronize an explicit date from a terminal |
 
 ## FOSS EHR patient synchronization
 
 FOSS EHR does not expose a supported patient API, so EyeFlow uses an operator-controlled
-Playwright browser profile. Run `pnpm emr:login`, complete the login in the browser that opens,
-and press Enter in the terminal after the appointments page appears. EyeFlow stores only the
-resulting local browser profile under `.eyeflow/`; it never requests or stores the EMR password.
+Playwright browser profile. An administrator selects **Connect EMR** on the dashboard and completes
+the login in the private browser window that EyeFlow opens. EyeFlow stores only the resulting local
+browser profile under `.eyeflow/`; it never requests or stores the EMR password.
 
-After authentication, run `pnpm emr:sync` for today's appointments or
-`pnpm emr:sync 2026-07-18` for a specific date. The connector imports only the stable patient
+Once connected, any signed-in user can select **Sync patients** for the active day. EyeFlow also
+synchronizes today's appointments at the interval configured by `EMR_SYNC_INTERVAL_MINUTES`
+(15 minutes by default) while at least one authenticated dashboard is open. The terminal commands
+remain available as recovery and diagnostic tools, but they are not required for routine use.
+
+The connector imports only the stable patient
 number, display name, appointment identifier/date, and visit type. It deliberately excludes phone
 numbers and clinical details. In Add Collection, the patient field becomes a searchable picker for
 the selected collection date. Patients without an existing EyeFlow record carry a green **New**
 badge; selecting one links future collections by stable EMR patient number rather than by name.
 
-The connector is intended for a trusted local host. The saved EMR session is sensitive, is ignored
-by Git, and must not be copied into images or shared storage. Because the integration follows the
-EMR user interface, rerun its parser tests and review selectors whenever the EMR UI changes.
+The connector is intended for a trusted local host with a graphical browser environment. The saved
+EMR session is sensitive, is ignored by Git, and must not be copied into images or shared storage.
+Closing every EyeFlow dashboard pauses automatic synchronization; the manual button remains the
+immediate recovery path after reopening the app. A continuously running Kubernetes deployment will
+need a dedicated browser worker before this connector can be enabled there. Because the integration
+follows the EMR user interface, rerun its parser tests and review selectors whenever the EMR UI changes.
 
 ## Repository layout
 

@@ -52,6 +52,11 @@ sensitive authenticated session and must remain outside Git and container images
 uses stable EMR patient and appointment identifiers, imports the minimum operational fields, and
 does not persist phone numbers or clinical content. UI selectors are integration contracts and
 must be covered by parser tests because the upstream product does not provide a supported API.
+Only administrators may create or replace the browser session. Authenticated revenue users may run
+a manual synchronization, and the dashboard schedules the same audited server operation while it is
+open. Do not move browser credentials, cookies, or profile contents into application tables. A
+headless worker with an encrypted persistent volume is required before enabling unattended sync in
+Kubernetes.
 
 ## Testing strategy
 
