@@ -33,6 +33,14 @@ function appointmentsUrl(date: string): string {
   return url.toString();
 }
 
+function isAppointmentsUrl(url: string): boolean {
+  return url.includes("/clinical/opd/appointments");
+}
+
+function isLoginUrl(url: string): boolean {
+  return url.includes("/users/login");
+}
+
 async function exclusiveBrowserOperation<T>(operation: () => Promise<T>): Promise<T> {
   if (browserOperation) throw new Error("An EMR browser operation is already running.");
   const pending = operation();
@@ -60,9 +68,21 @@ export async function connectEmrBrowser(): Promise<void> {
     const context = await chromium.launchPersistentContext(profileDirectory(), { headless: false });
     const page = context.pages()[0] ?? (await context.newPage());
     try {
-      await page.goto(appointmentsUrl(clinicDateKey()), { waitUntil: "domcontentloaded" });
-      if (!page.url().includes("/clinical/opd/appointments")) {
-        await page.waitForURL("**/clinical/opd/appointments**", { timeout: 5 * 60_000 });
+      const targetUrl = appointmentsUrl(clinicDateKey());
+      await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
+
+      if (isLoginUrl(page.url())) {
+        await page.waitForURL((url) => !isLoginUrl(url.toString()), { timeout: 5 * 60_000 });
+      }
+
+      if (!isAppointmentsUrl(page.url())) {
+        await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
+      }
+
+      if (!isAppointmentsUrl(page.url())) {
+        throw new Error(
+          "EMR login did not reach the appointments page. Please try connecting again.",
+        );
       }
       await writeFile(sessionMarkerPath(), new Date().toISOString(), {
         encoding: "utf8",
