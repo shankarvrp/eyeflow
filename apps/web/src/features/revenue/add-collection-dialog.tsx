@@ -230,39 +230,45 @@ export function AddCollectionDialog({
                   {patientOptionsLoading ? (
                     <p className="px-3 py-4 text-sm text-[var(--muted)]">Loading EMR patients…</p>
                   ) : matchingPatientOptions.length > 0 ? (
-                    matchingPatientOptions.map((option) => (
-                      <button
-                        className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-[var(--subtle-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                        key={option.id}
-                        onClick={() => {
-                          setPatient(option.displayName);
-                          setEmrPatientId(option.id);
-                          setPatientPickerOpen(false);
-                        }}
-                        onMouseDown={(event) => event.preventDefault()}
-                        role="option"
-                        type="button"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold">
-                            {option.displayName}
+                    <>
+                      <div className="sticky top-0 z-10 flex items-center justify-between rounded-xl bg-[var(--panel)] px-3 py-2 text-xs text-[var(--muted)]">
+                        <span>{matchingPatientOptions.length} synchronized patients</span>
+                        {matchingPatientOptions.length > 6 ? <span>Scroll for more</span> : null}
+                      </div>
+                      {matchingPatientOptions.map((option) => (
+                        <button
+                          className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-[var(--subtle-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                          key={option.id}
+                          onClick={() => {
+                            setPatient(option.displayName);
+                            setEmrPatientId(option.id);
+                            setPatientPickerOpen(false);
+                          }}
+                          onMouseDown={(event) => event.preventDefault()}
+                          role="option"
+                          type="button"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold">
+                              {option.displayName}
+                            </span>
+                            <span className="block text-xs text-[var(--muted)]">
+                              {option.externalPatientId}
+                              {option.visitType ? ` · ${option.visitType}` : ""}
+                            </span>
                           </span>
-                          <span className="block text-xs text-[var(--muted)]">
-                            {option.externalPatientId}
-                            {option.visitType ? ` · ${option.visitType}` : ""}
-                          </span>
-                        </span>
-                        {option.hasEyeFlowRecord ? (
-                          <span className="rounded-full bg-slate-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--muted-strong)]">
-                            Existing
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-emerald-500/12 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                            New
-                          </span>
-                        )}
-                      </button>
-                    ))
+                          {option.hasEyeFlowRecord ? (
+                            <span className="rounded-full bg-slate-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--muted-strong)]">
+                              Existing
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-emerald-500/12 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                              New
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </>
                   ) : (
                     <p className="px-3 py-4 text-sm text-[var(--muted)]">
                       No synchronized EMR patients for this date. You can still enter a name.

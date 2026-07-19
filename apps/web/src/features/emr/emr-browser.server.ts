@@ -9,6 +9,7 @@ import {
 } from "./emr-scraper";
 
 const sessionMarkerName = ".eyeflow-session";
+const allPatientFilterIds = ["all_occupied", "all_na", "all_completed"] as const;
 let browserOperation: Promise<unknown> | undefined;
 
 function baseUrl(): string {
@@ -110,8 +111,8 @@ export async function scrapeEmrAppointments(date: string): Promise<EmrAppointmen
       }
 
       const appointments = new Map<string, AppointmentListEntry>();
-      for (const filter of ["Occupied", "Completed"] as const) {
-        await selectAllPatientsFilter(page, filter);
+      for (const filterId of allPatientFilterIds) {
+        await selectAllPatientsFilter(page, filterId);
         for (const appointment of await readVisibleAppointments(page)) {
           appointments.set(appointment.appointmentId, appointment);
         }
@@ -148,6 +149,7 @@ export async function scrapeEmrAppointments(date: string): Promise<EmrAppointmen
 async function readVisibleAppointments(page: Page) {
   const rawAppointments = await page
     .locator('a[href^="/clinical/opd/appointments/"]')
+    .filter({ visible: true })
     .evaluateAll((elements) =>
       elements.map((element) => ({
         href: element.getAttribute("href") ?? "",
@@ -159,12 +161,19 @@ async function readVisibleAppointments(page: Page) {
     .filter((appointment) => appointment !== null);
 }
 
-async function selectAllPatientsFilter(page: Page, label: "Completed" | "Occupied") {
-  const controls = page.getByText(label, { exact: true }).filter({ visible: true });
+async function selectAllPatientsFilter(page: Page, filterId: (typeof allPatientFilterIds)[number]) {
+  const controls = page.locator(`[data-table-id="${filterId}"]`).filter({ visible: true });
+  await controls.waitFor({ state: "visible", timeout: 10_000 });
   const count = await controls.count();
-  if (count === 0) throw new Error(`The EMR ${label} filter is unavailable.`);
-  await controls.nth(count - 1).click();
-  await page.waitForTimeout(300);
+  if (count !== 1) throw new Error(`The EMR ${filterId} filter is unavailable or ambiguous.`);
+  await controls.click();
+  await page.waitForFunction(
+    (activeFilterId) =>
+      document.querySelector(`[data-table-id="${activeFilterId}"]`)?.classList.contains("active") ??
+      false,
+    filterId,
+  );
+  await page.waitForTimeout(500);
 }
 
 async function invalidateSessionMarker(): Promise<void> {

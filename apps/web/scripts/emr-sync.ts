@@ -22,6 +22,7 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
 await ensurePrivateProfileDirectory();
 const context = await chromium.launchPersistentContext(emrProfileDirectory, { headless: true });
 const page = context.pages()[0] ?? (await context.newPage());
+const allPatientFilterIds = ["all_occupied", "all_na", "all_completed"] as const;
 
 try {
   await page.goto(appointmentsUrl(requestedDate), { waitUntil: "domcontentloaded" });
@@ -29,20 +30,40 @@ try {
     throw new Error("The EMR session has expired. Run `pnpm emr:login` and sign in again.");
   }
 
-  const rawAppointments = await page
-    .locator('a[href^="/clinical/opd/appointments/"]')
-    .evaluateAll((elements) =>
-      elements.map((element) => ({
-        href: element.getAttribute("href") ?? "",
-        text: (element as HTMLElement).innerText,
-      })),
+  const appointmentMap = new Map<
+    string,
+    NonNullable<ReturnType<typeof parseAppointmentListEntry>>
+  >();
+  for (const filterId of allPatientFilterIds) {
+    const controls = page.locator(`[data-table-id="${filterId}"]`).filter({ visible: true });
+    await controls.waitFor({ state: "visible", timeout: 10_000 });
+    if ((await controls.count()) !== 1) {
+      throw new Error(`The EMR ${filterId} filter is unavailable or ambiguous.`);
+    }
+    await controls.click();
+    await page.waitForFunction(
+      (activeFilterId) =>
+        document
+          .querySelector(`[data-table-id="${activeFilterId}"]`)
+          ?.classList.contains("active") ?? false,
+      filterId,
     );
-  const appointmentMap = new Map(
-    rawAppointments
-      .map(({ href, text }) => parseAppointmentListEntry(href, text))
-      .filter((entry) => entry !== null)
-      .map((entry) => [entry.appointmentId, entry]),
-  );
+    await page.waitForTimeout(500);
+
+    const rawAppointments = await page
+      .locator('a[href^="/clinical/opd/appointments/"]')
+      .filter({ visible: true })
+      .evaluateAll((elements) =>
+        elements.map((element) => ({
+          href: element.getAttribute("href") ?? "",
+          text: (element as HTMLElement).innerText,
+        })),
+      );
+    for (const { href, text } of rawAppointments) {
+      const appointment = parseAppointmentListEntry(href, text);
+      if (appointment) appointmentMap.set(appointment.appointmentId, appointment);
+    }
+  }
 
   const synchronized = [];
   for (const appointment of appointmentMap.values()) {
