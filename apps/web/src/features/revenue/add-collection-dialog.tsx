@@ -93,16 +93,14 @@ export function AddCollectionDialog({
   const availableDepartments = allowedDepartments.filter(
     (department) => !activeDepartments.includes(department),
   );
-  const matchingPatientOptions = patientOptions
-    .filter((option) => {
-      const search = patient.trim().toLocaleLowerCase("en-IN");
-      return (
-        search.length === 0 ||
-        option.displayName.toLocaleLowerCase("en-IN").includes(search) ||
-        option.externalPatientId.toLocaleLowerCase("en-IN").includes(search)
-      );
-    })
-    .slice(0, 8);
+  const matchingPatientOptions = patientOptions.filter((option) => {
+    const search = patient.trim().toLocaleLowerCase("en-IN");
+    return (
+      search.length === 0 ||
+      option.displayName.toLocaleLowerCase("en-IN").includes(search) ||
+      option.externalPatientId.toLocaleLowerCase("en-IN").includes(search)
+    );
+  });
   const totals = useMemo(
     () =>
       populatedRows.reduce(
@@ -232,7 +230,9 @@ export function AddCollectionDialog({
                   ) : matchingPatientOptions.length > 0 ? (
                     <>
                       <div className="sticky top-0 z-10 flex items-center justify-between rounded-xl bg-[var(--panel)] px-3 py-2 text-xs text-[var(--muted)]">
-                        <span>{matchingPatientOptions.length} synchronized patients</span>
+                        <span>
+                          {matchingPatientOptions.length} synchronized patients · {occurredOn}
+                        </span>
                         {matchingPatientOptions.length > 6 ? <span>Scroll for more</span> : null}
                       </div>
                       {matchingPatientOptions.map((option) => (
