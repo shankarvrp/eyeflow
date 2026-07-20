@@ -38,7 +38,7 @@ export const auth = betterAuth({
     tanstackStartCookies(),
   ],
   rateLimit: {
-    enabled: true,
+    enabled: process.env.NODE_ENV === "production",
     max: 100,
     window: 60,
   },

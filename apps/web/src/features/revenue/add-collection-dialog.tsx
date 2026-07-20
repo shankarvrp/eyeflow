@@ -478,7 +478,7 @@ export function AddCollectionDialog({
                 Cancel
               </Button>
             </DialogClose>
-            <Button disabled={submitting} type="submit">
+            <Button disabled={submitting} onClick={() => void submit()} type="button">
               {submitting ? (
                 "Saving…"
               ) : (

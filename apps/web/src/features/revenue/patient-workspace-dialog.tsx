@@ -311,7 +311,7 @@ export function PatientWorkspaceDialog({
               </Button>
             </DialogClose>
             {canSave ? (
-              <Button disabled={submitting} type="submit">
+              <Button disabled={submitting} onClick={() => void submit()} type="button">
                 <Check size={17} />
                 {submitting ? "Saving…" : "Save patient changes"}
               </Button>
