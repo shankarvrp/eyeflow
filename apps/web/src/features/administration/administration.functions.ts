@@ -1,7 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { isAdminRole, requireSession } from "../auth/auth.server";
-import { readAdministrationUsers, updateAdministrationUser } from "./administration.server";
-import { updateUserAccessSchema } from "./administration-schema";
+import {
+  readAdministrationUsers,
+  readRevenueTargets,
+  updateAdministrationUser,
+  updateRevenueTargets,
+} from "./administration.server";
+import { updateRevenueTargetsSchema, updateUserAccessSchema } from "./administration-schema";
 
 async function requireAdministrator() {
   const session = await requireSession();
@@ -13,7 +18,8 @@ async function requireAdministrator() {
 
 export const getAdministrationData = createServerFn({ method: "GET" }).handler(async () => {
   const session = await requireAdministrator();
-  return { session, users: await readAdministrationUsers() };
+  const [targets, users] = await Promise.all([readRevenueTargets(), readAdministrationUsers()]);
+  return { session, targets, users };
 });
 
 export const saveUserAccess = createServerFn({ method: "POST" })
@@ -21,4 +27,11 @@ export const saveUserAccess = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const session = await requireAdministrator();
     return updateAdministrationUser(data, session.user.id);
+  });
+
+export const saveRevenueTargets = createServerFn({ method: "POST" })
+  .validator(updateRevenueTargetsSchema)
+  .handler(async ({ data }) => {
+    const session = await requireAdministrator();
+    return updateRevenueTargets(data, session.user.id);
   });

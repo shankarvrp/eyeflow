@@ -7,6 +7,7 @@ import {
   emrPatients,
   emrReceipts,
   payments,
+  revenueTargets,
 } from "@eyeflow/db/schema";
 import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import type {
@@ -241,6 +242,15 @@ export async function readDashboardData(
           .where(eq(dailyClosures.businessDate, query.from))
           .limit(1)
       : [];
+  const [configuredTargets] = await db
+    .select({
+      daily: revenueTargets.dailyAmount,
+      monthly: revenueTargets.monthlyAmount,
+      weekly: revenueTargets.weeklyAmount,
+    })
+    .from(revenueTargets)
+    .where(eq(revenueTargets.id, "clinic"))
+    .limit(1);
 
   const departmentQuery = db.select({ name: departments.name }).from(departments);
   const departmentRows =
@@ -390,11 +400,23 @@ export async function readDashboardData(
       transactions: todayRows.length,
     },
     targets: {
-      daily: targetProgress("Daily", netRevenue(todayRows), 200_000),
+      daily: targetProgress(
+        "Daily",
+        netRevenue(todayRows),
+        Number(configuredTargets?.daily ?? 200_000),
+      ),
       ...(isAdmin
         ? {
-            monthly: targetProgress("Monthly", netRevenue(monthlyRows), 5_000_000),
-            weekly: targetProgress("Weekly", netRevenue(weeklyRows), 1_200_000),
+            monthly: targetProgress(
+              "Monthly",
+              netRevenue(monthlyRows),
+              Number(configuredTargets?.monthly ?? 5_000_000),
+            ),
+            weekly: targetProgress(
+              "Weekly",
+              netRevenue(weeklyRows),
+              Number(configuredTargets?.weekly ?? 1_200_000),
+            ),
           }
         : {}),
     },

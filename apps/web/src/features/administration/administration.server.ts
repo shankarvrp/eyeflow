@@ -1,8 +1,14 @@
 import { createDatabase } from "@eyeflow/db";
-import { auditEvents, departments, user, userDepartmentAccess } from "@eyeflow/db/schema";
+import {
+  auditEvents,
+  departments,
+  revenueTargets,
+  user,
+  userDepartmentAccess,
+} from "@eyeflow/db/schema";
 import type { DepartmentName } from "@eyeflow/shared";
 import { asc, eq } from "drizzle-orm";
-import type { UpdateUserAccess } from "./administration-schema";
+import type { UpdateRevenueTargets, UpdateUserAccess } from "./administration-schema";
 
 let database: ReturnType<typeof createDatabase> | undefined;
 
@@ -24,6 +30,70 @@ export interface AdministrationUser {
   id: string;
   name: string;
   role: "admin" | "user";
+}
+
+export interface RevenueTargetSettings {
+  daily: number;
+  monthly: number;
+  weekly: number;
+}
+
+export async function readRevenueTargets(): Promise<RevenueTargetSettings> {
+  const db = getDatabase();
+  const [targets] = await db
+    .select({
+      daily: revenueTargets.dailyAmount,
+      monthly: revenueTargets.monthlyAmount,
+      weekly: revenueTargets.weeklyAmount,
+    })
+    .from(revenueTargets)
+    .where(eq(revenueTargets.id, "clinic"))
+    .limit(1);
+  return {
+    daily: Number(targets?.daily ?? 200_000),
+    monthly: Number(targets?.monthly ?? 5_000_000),
+    weekly: Number(targets?.weekly ?? 1_200_000),
+  };
+}
+
+export async function updateRevenueTargets(
+  input: UpdateRevenueTargets,
+  actorUserId: string,
+): Promise<RevenueTargetSettings> {
+  const db = getDatabase();
+  const before = await readRevenueTargets();
+  const after = { daily: input.daily, monthly: input.monthly, weekly: input.weekly };
+  await db.transaction(async (transaction) => {
+    await transaction
+      .insert(revenueTargets)
+      .values({
+        dailyAmount: input.daily.toFixed(2),
+        id: "clinic",
+        monthlyAmount: input.monthly.toFixed(2),
+        updatedByUserId: actorUserId,
+        weeklyAmount: input.weekly.toFixed(2),
+      })
+      .onConflictDoUpdate({
+        target: revenueTargets.id,
+        set: {
+          dailyAmount: input.daily.toFixed(2),
+          monthlyAmount: input.monthly.toFixed(2),
+          updatedAt: new Date(),
+          updatedByUserId: actorUserId,
+          weeklyAmount: input.weekly.toFixed(2),
+        },
+      });
+    await transaction.insert(auditEvents).values({
+      action: "administration.revenue-targets.updated",
+      actorUserId,
+      after: { daily: after.daily, monthly: after.monthly, weekly: after.weekly },
+      before: { daily: before.daily, monthly: before.monthly, weekly: before.weekly },
+      entityId: "clinic",
+      entityType: "revenue-targets",
+      reason: input.reason,
+    });
+  });
+  return after;
 }
 
 export async function readAdministrationUsers(): Promise<AdministrationUser[]> {

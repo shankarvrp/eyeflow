@@ -66,6 +66,8 @@ test("administrators can open role and department access management", async ({ p
     page.getByRole("button", { name: /Collection User user@eyeflow\.local/ }),
   ).toBeVisible();
   await expect(page.getByLabel("Role")).toBeVisible();
+  await expect(page.getByLabel("Daily target")).toHaveValue("200000");
+  await expect(page.getByRole("button", { name: "Save targets" })).toBeDisabled();
 });
 
 test("adds collections for multiple departments in one save", async ({ page }) => {

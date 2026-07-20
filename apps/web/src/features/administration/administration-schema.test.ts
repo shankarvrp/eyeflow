@@ -1,6 +1,6 @@
 import { departments } from "@eyeflow/shared";
 import { describe, expect, it } from "vitest";
-import { updateUserAccessSchema } from "./administration-schema";
+import { updateRevenueTargetsSchema, updateUserAccessSchema } from "./administration-schema";
 
 describe("administration access validation", () => {
   it("requires one permission record for every configured department", () => {
@@ -24,6 +24,25 @@ describe("administration access validation", () => {
         reason: "Annual access review",
         role: "user",
         userId: "staff-id",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("keeps clinic targets in ascending periods", () => {
+    expect(
+      updateRevenueTargetsSchema.safeParse({
+        daily: 200_000,
+        monthly: 5_000_000,
+        reason: "Monthly planning review",
+        weekly: 1_200_000,
+      }).success,
+    ).toBe(true);
+    expect(
+      updateRevenueTargetsSchema.safeParse({
+        daily: 200_000,
+        monthly: 500_000,
+        reason: "Invalid target order",
+        weekly: 1_200_000,
       }).success,
     ).toBe(false);
   });

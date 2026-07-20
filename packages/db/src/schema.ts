@@ -226,6 +226,18 @@ export const dailyClosures = pgTable(
   (table) => [uniqueIndex("daily_closures_business_date_uidx").on(table.businessDate)],
 );
 
+export const revenueTargets = pgTable("revenue_targets", {
+  id: text("id").primaryKey().default("clinic"),
+  dailyAmount: numeric("daily_amount", { precision: 12, scale: 2 }).notNull().default("200000"),
+  weeklyAmount: numeric("weekly_amount", { precision: 12, scale: 2 }).notNull().default("1200000"),
+  monthlyAmount: numeric("monthly_amount", { precision: 12, scale: 2 })
+    .notNull()
+    .default("5000000"),
+  updatedByUserId: text("updated_by_user_id").references(() => user.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const userDepartmentAccess = pgTable(
   "user_department_access",
   {

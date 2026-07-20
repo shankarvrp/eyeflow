@@ -1,10 +1,11 @@
 import { Button, cn } from "@eyeflow/ui";
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, Save, ShieldCheck, UserRoundCog, Users } from "lucide-react";
+import { Check, Gauge, Save, ShieldCheck, UserRoundCog, Users } from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "../components/app-shell";
 import {
   getAdministrationData,
+  saveRevenueTargets,
   saveUserAccess,
 } from "../features/administration/administration.functions";
 import type { AdministrationUser } from "../features/administration/administration.server";
@@ -22,6 +23,10 @@ function Administration() {
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [targets, setTargets] = useState(loaderData.targets);
+  const [targetReason, setTargetReason] = useState("");
+  const [targetMessage, setTargetMessage] = useState<string>();
+  const [savingTargets, setSavingTargets] = useState(false);
 
   const selectUser = (id: string) => {
     const selected = users.find((entry) => entry.id === id);
@@ -57,6 +62,21 @@ function Administration() {
       setMessage(error instanceof Error ? error.message : "Unable to save permissions.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveTargets = async () => {
+    try {
+      setSavingTargets(true);
+      setTargetMessage(undefined);
+      const updated = await saveRevenueTargets({ data: { ...targets, reason: targetReason } });
+      setTargets(updated);
+      setTargetReason("");
+      setTargetMessage("Revenue targets saved and applied to the dashboard.");
+    } catch (error) {
+      setTargetMessage(error instanceof Error ? error.message : "Unable to save revenue targets.");
+    } finally {
+      setSavingTargets(false);
     }
   };
 
@@ -213,6 +233,76 @@ function Administration() {
             )}
           </article>
         </div>
+
+        <article className="panel mt-5 p-5 sm:p-6">
+          <div className="flex flex-col gap-2 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="panel-title flex items-center gap-2">
+                <Gauge size={18} /> Revenue targets
+              </h2>
+              <p className="panel-subtitle">
+                Daily is visible to all staff. Weekly and monthly remain administrator-only.
+              </p>
+            </div>
+            <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+              Clinic-wide
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            {(
+              [
+                ["daily", "Daily target"],
+                ["weekly", "Weekly target"],
+                ["monthly", "Monthly target"],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key}>
+                <span className="form-label">{label}</span>
+                <span className="relative block">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-[var(--muted)]">
+                    ₹
+                  </span>
+                  <input
+                    aria-label={label}
+                    className="form-control pl-8"
+                    min="1"
+                    onChange={(event) =>
+                      setTargets({ ...targets, [key]: Number(event.target.value || 0) })
+                    }
+                    step="1000"
+                    type="number"
+                    value={targets[key]}
+                  />
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 border-t border-[var(--border)] pt-5 sm:flex-row sm:items-end sm:justify-between">
+            <label className="w-full sm:max-w-lg">
+              <span className="form-label">Audit reason</span>
+              <input
+                className="form-control w-full"
+                onChange={(event) => setTargetReason(event.target.value)}
+                placeholder="Monthly planning review"
+                value={targetReason}
+              />
+            </label>
+            <Button
+              disabled={savingTargets || targetReason.trim().length < 3}
+              onClick={() => void saveTargets()}
+            >
+              <Save size={16} />
+              {savingTargets ? "Saving…" : "Save targets"}
+            </Button>
+          </div>
+          {targetMessage ? (
+            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              <Check size={14} /> {targetMessage}
+            </p>
+          ) : null}
+        </article>
       </section>
     </AppShell>
   );

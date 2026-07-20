@@ -16,3 +16,23 @@ export const updateUserAccessSchema = z.object({
 });
 
 export type UpdateUserAccess = z.infer<typeof updateUserAccessSchema>;
+
+const targetAmountSchema = z.number().positive().max(100_000_000);
+
+export const updateRevenueTargetsSchema = z
+  .object({
+    daily: targetAmountSchema,
+    monthly: targetAmountSchema,
+    reason: z.string().trim().min(3).max(240),
+    weekly: targetAmountSchema,
+  })
+  .refine((value) => value.weekly >= value.daily, {
+    message: "Weekly target must be at least the daily target",
+    path: ["weekly"],
+  })
+  .refine((value) => value.monthly >= value.weekly, {
+    message: "Monthly target must be at least the weekly target",
+    path: ["monthly"],
+  });
+
+export type UpdateRevenueTargets = z.infer<typeof updateRevenueTargetsSchema>;
