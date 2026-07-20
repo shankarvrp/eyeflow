@@ -49,9 +49,13 @@ Patient and payment mutations will require an append-only audit event. Logs must
 
 The FOSS EHR connector is a local browser-automation boundary. Its persistent profile contains a
 sensitive authenticated session and must remain outside Git and container images. Synchronization
-uses stable EMR patient and appointment identifiers, imports the minimum operational fields, and
-does not persist phone numbers or clinical content. UI selectors are integration contracts and
-must be covered by parser tests because the upstream product does not provide a supported API.
+uses stable EMR patient, appointment, and receipt identifiers, imports the minimum operational fields,
+and does not persist phone numbers, credentials, clinical content, or free-text receipt remarks.
+Receipt imports are immutable source records; department/payment mappings are reviewable drafts, and
+the final payment retains receipt provenance to enforce one-time use. Refunds and unknown source
+labels must be flagged rather than silently converted into positive collections. UI selectors and
+the collection-report PDF layout are integration contracts and must be covered by parser tests
+because the upstream product does not provide a supported API.
 Only administrators may create or replace the browser session. Authenticated revenue users may run
 a manual synchronization, and the dashboard schedules the same audited server operation while it is
 open. Do not move browser credentials, cookies, or profile contents into application tables. A

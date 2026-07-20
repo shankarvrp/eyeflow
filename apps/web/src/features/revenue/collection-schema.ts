@@ -14,6 +14,7 @@ export const newPaymentLineSchema = z
     discount: amountSchema,
     mode: z.enum(["cash", "credit", "online"]),
     providerOrMode: z.string().trim().max(120).nullable(),
+    emrReceiptId: z.string().uuid().nullable().optional(),
   })
   .refine((value) => value.discount <= value.amount, {
     message: "Discount cannot exceed the payment amount",
@@ -24,12 +25,22 @@ export const newPaymentLineSchema = z
     path: ["providerOrMode"],
   });
 
-export const collectionBatchSchema = z.object({
-  emrPatientId: z.string().uuid().nullable().optional(),
-  occurredOn: isoDateSchema,
-  patient: z.string().trim().min(2).max(120),
-  payments: z.array(newPaymentLineSchema).min(1, "Add at least one payment"),
-});
+export const collectionBatchSchema = z
+  .object({
+    emrPatientId: z.string().uuid().nullable().optional(),
+    occurredOn: isoDateSchema,
+    patient: z.string().trim().min(2).max(120),
+    payments: z.array(newPaymentLineSchema).min(1, "Add at least one payment"),
+  })
+  .refine(
+    (value) => {
+      const receiptIds = value.payments.flatMap((payment) =>
+        payment.emrReceiptId ? [payment.emrReceiptId] : [],
+      );
+      return new Set(receiptIds).size === receiptIds.length;
+    },
+    { message: "An imported receipt may be used only once", path: ["payments"] },
+  );
 
 export type NewCollectionBatch = z.infer<typeof collectionBatchSchema>;
 export type NewPaymentLine = z.infer<typeof newPaymentLineSchema>;

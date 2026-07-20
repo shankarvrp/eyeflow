@@ -134,6 +134,37 @@ export const emrAppointments = pgTable(
   ],
 );
 
+export const emrReceipts = pgTable(
+  "emr_receipts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    source: text("source").notNull().default("foss"),
+    externalLineKey: text("external_line_key").notNull(),
+    externalReceiptId: text("external_receipt_id").notNull(),
+    emrPatientId: uuid("emr_patient_id")
+      .notNull()
+      .references(() => emrPatients.id, { onDelete: "cascade" }),
+    receiptDate: date("receipt_date").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    receiptType: text("receipt_type").notNull(),
+    paymentMode: text("payment_mode").notNull(),
+    sourceDepartment: text("source_department").notNull(),
+    mappedDepartment: text("mapped_department"),
+    mappedMode: paymentKind("mapped_mode").notNull(),
+    mappedProviderOrMode: text("mapped_provider_or_mode"),
+    requiresReview: boolean("requires_review").notNull().default(false),
+    amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("emr_receipts_source_line_key_uidx").on(table.source, table.externalLineKey),
+    index("emr_receipts_date_idx").on(table.receiptDate),
+    index("emr_receipts_patient_idx").on(table.emrPatientId),
+  ],
+);
+
 export const customers = pgTable(
   "customers",
   {
@@ -159,6 +190,7 @@ export const payments = pgTable(
     departmentId: uuid("department_id")
       .notNull()
       .references(() => departments.id),
+    emrReceiptId: uuid("emr_receipt_id").references(() => emrReceipts.id),
     kind: paymentKind("kind").notNull(),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
     discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"),
@@ -171,6 +203,7 @@ export const payments = pgTable(
   (table) => [
     index("payments_occurred_at_idx").on(table.occurredAt),
     index("payments_customer_department_idx").on(table.customerId, table.departmentId),
+    uniqueIndex("payments_emr_receipt_id_uidx").on(table.emrReceiptId),
   ],
 );
 
@@ -228,7 +261,15 @@ export const accountRelations = relations(account, ({ one }) => ({
 export const customerRelations = relations(customers, ({ many }) => ({ payments: many(payments) }));
 export const emrPatientRelations = relations(emrPatients, ({ many, one }) => ({
   appointments: many(emrAppointments),
+  receipts: many(emrReceipts),
   customer: one(customers, { fields: [emrPatients.id], references: [customers.emrPatientId] }),
+}));
+export const emrReceiptRelations = relations(emrReceipts, ({ many, one }) => ({
+  patient: one(emrPatients, {
+    fields: [emrReceipts.emrPatientId],
+    references: [emrPatients.id],
+  }),
+  payments: many(payments),
 }));
 export const emrAppointmentRelations = relations(emrAppointments, ({ one }) => ({
   patient: one(emrPatients, {
@@ -244,6 +285,10 @@ export const paymentRelations = relations(payments, ({ one }) => ({
   createdBy: one(user, { fields: [payments.createdByUserId], references: [user.id] }),
   customer: one(customers, { fields: [payments.customerId], references: [customers.id] }),
   department: one(departments, { fields: [payments.departmentId], references: [departments.id] }),
+  emrReceipt: one(emrReceipts, {
+    fields: [payments.emrReceiptId],
+    references: [emrReceipts.id],
+  }),
 }));
 export const userDepartmentAccessRelations = relations(userDepartmentAccess, ({ one }) => ({
   department: one(departments, {

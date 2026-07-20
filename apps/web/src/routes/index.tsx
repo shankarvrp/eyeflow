@@ -34,6 +34,7 @@ import {
 import {
   connectEmr,
   getEmrPatientOptions,
+  getEmrReceiptDrafts,
   getEmrSyncStatus,
   syncEmrNow,
 } from "../features/emr/emr.functions";
@@ -122,6 +123,11 @@ function Dashboard() {
     (appointmentDate: string) => getEmrPatientOptions({ data: { appointmentDate } }),
     [],
   );
+  const loadEmrReceiptDrafts = useCallback(
+    (appointmentDate: string, emrPatientId: string) =>
+      getEmrReceiptDrafts({ data: { appointmentDate, emrPatientId } }),
+    [],
+  );
 
   const synchronizeEmr = useCallback(async (appointmentDate: string, scheduled = false) => {
     try {
@@ -130,7 +136,7 @@ function Dashboard() {
       const status = await syncEmrNow({ data: { appointmentDate } });
       setEmrStatus(status);
       setEmrMessage(
-        `${status.patientCount} patient${status.patientCount === 1 ? "" : "s"} synchronized for ${appointmentDate}.`,
+        `${status.patientCount} patient${status.patientCount === 1 ? "" : "s"} and ${status.receiptCount} receipt${status.receiptCount === 1 ? "" : "s"} synchronized for ${appointmentDate}.`,
       );
     } catch (error) {
       setEmrMessage(error instanceof Error ? error.message : "Unable to synchronize the EMR.");
@@ -148,7 +154,7 @@ function Dashboard() {
       });
       setEmrStatus(status);
       setEmrMessage(
-        `EMR connected. ${status.patientCount} patient${status.patientCount === 1 ? "" : "s"} synchronized for today.`,
+        `EMR connected. ${status.patientCount} patient${status.patientCount === 1 ? "" : "s"} and ${status.receiptCount} receipt${status.receiptCount === 1 ? "" : "s"} synchronized for today.`,
       );
     } catch (error) {
       setEmrMessage(error instanceof Error ? error.message : "Unable to connect the EMR.");
@@ -271,7 +277,7 @@ function Dashboard() {
                 className={emrOperation === "syncing" ? "animate-spin" : undefined}
                 size={16}
               />
-              {emrOperation === "syncing" ? "Syncing patients…" : "Sync patients"}
+              {emrOperation === "syncing" ? "Syncing EMR…" : "Sync EMR"}
             </Button>
             <Button asChild variant="outline">
               <a download href={exportHref("xlsx")}>
@@ -312,7 +318,7 @@ function Dashboard() {
             </span>
             <span className="text-[var(--muted-strong)]">
               {emrStatus.connected
-                ? `${emrStatus.patientCount} patients for ${emrStatus.appointmentDate}`
+                ? `${emrStatus.patientCount} patients · ${emrStatus.receiptCount} receipts for ${emrStatus.appointmentDate}`
                 : isAdmin
                   ? "Connect once to enable patient synchronization."
                   : "An administrator must connect the EMR."}
@@ -827,6 +833,7 @@ function Dashboard() {
           isAdmin && query.from === query.to ? query.from : initialDashboardQuery.from
         }
         loadPatientOptions={loadEmrPatientOptions}
+        loadReceiptDrafts={loadEmrReceiptDrafts}
         onAdd={addCollection}
         onOpenChange={setAddCollectionOpen}
         open={addCollectionOpen}

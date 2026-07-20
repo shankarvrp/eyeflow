@@ -2,11 +2,18 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { isAdminRole, requireRevenuePermission } from "../auth/auth.server";
 import { isoDateSchema } from "../revenue/collection-query";
-import { importEmrAppointments, readEmrPatientOptions, readEmrSyncStatus } from "./emr.server";
+import {
+  importEmrAppointments,
+  importEmrReceipts,
+  readEmrPatientOptions,
+  readEmrReceiptDrafts,
+  readEmrSyncStatus,
+} from "./emr.server";
 import {
   connectEmrBrowser,
   hasConnectedEmrSession,
   scrapeEmrAppointments,
+  scrapeEmrReceipts,
 } from "./emr-browser.server";
 
 const emrPatientQuerySchema = z.object({ appointmentDate: isoDateSchema });
@@ -16,6 +23,17 @@ export const getEmrPatientOptions = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     await requireRevenuePermission("read");
     return readEmrPatientOptions(data.appointmentDate);
+  });
+
+const emrReceiptDraftQuerySchema = emrPatientQuerySchema.extend({
+  emrPatientId: z.string().uuid(),
+});
+
+export const getEmrReceiptDrafts = createServerFn({ method: "GET" })
+  .validator(emrReceiptDraftQuerySchema)
+  .handler(async ({ data }) => {
+    await requireRevenuePermission("read");
+    return readEmrReceiptDrafts(data.appointmentDate, data.emrPatientId);
   });
 
 export const getEmrSyncStatus = createServerFn({ method: "GET" })
@@ -36,6 +54,8 @@ export const connectEmr = createServerFn({ method: "POST" })
     await connectEmrBrowser();
     const records = await scrapeEmrAppointments(data.appointmentDate);
     await importEmrAppointments(records, session.user.id, data.appointmentDate);
+    const receipts = await scrapeEmrReceipts(data.appointmentDate);
+    await importEmrReceipts(receipts, session.user.id, data.appointmentDate);
     return readEmrSyncStatus(data.appointmentDate, true);
   });
 
@@ -45,5 +65,7 @@ export const syncEmrNow = createServerFn({ method: "POST" })
     const session = await requireRevenuePermission("read");
     const records = await scrapeEmrAppointments(data.appointmentDate);
     await importEmrAppointments(records, session.user.id, data.appointmentDate);
+    const receipts = await scrapeEmrReceipts(data.appointmentDate);
+    await importEmrReceipts(receipts, session.user.id, data.appointmentDate);
     return readEmrSyncStatus(data.appointmentDate, true);
   });

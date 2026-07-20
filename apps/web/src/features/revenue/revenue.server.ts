@@ -1,6 +1,13 @@
 import { createDatabase } from "@eyeflow/db";
-import { auditEvents, customers, departments, emrPatients, payments } from "@eyeflow/db/schema";
-import { and, desc, eq, gte, ilike, inArray, lt } from "drizzle-orm";
+import {
+  auditEvents,
+  customers,
+  departments,
+  emrPatients,
+  emrReceipts,
+  payments,
+} from "@eyeflow/db/schema";
+import { and, desc, eq, gte, ilike, inArray, isNull, lt } from "drizzle-orm";
 import type {
   DashboardData,
   DepartmentSummary,
@@ -279,6 +286,30 @@ export async function insertCollectionBatch(
       throw new Error("The selected EMR patient is no longer available. Refresh the patient list.");
     }
 
+    const requestedReceiptIds = collection.payments.flatMap((payment) =>
+      payment.emrReceiptId ? [payment.emrReceiptId] : [],
+    );
+    if (requestedReceiptIds.length > 0) {
+      if (!selectedEmrPatient) {
+        throw new Error("Select the synchronized EMR patient before using imported receipts.");
+      }
+      const availableReceipts = await transaction
+        .select({ id: emrReceipts.id })
+        .from(emrReceipts)
+        .leftJoin(payments, eq(payments.emrReceiptId, emrReceipts.id))
+        .where(
+          and(
+            inArray(emrReceipts.id, requestedReceiptIds),
+            eq(emrReceipts.emrPatientId, selectedEmrPatient.id),
+            eq(emrReceipts.receiptDate, collection.occurredOn),
+            isNull(payments.id),
+          ),
+        );
+      if (availableReceipts.length !== requestedReceiptIds.length) {
+        throw new Error("One or more imported receipts are unavailable or already recorded.");
+      }
+    }
+
     const [existingCustomer] = selectedEmrPatient
       ? await transaction
           .select({ id: customers.id })
@@ -327,6 +358,7 @@ export async function insertCollectionBatch(
         customerId,
         departmentId,
         discount: payment.discount.toFixed(2),
+        emrReceiptId: payment.emrReceiptId,
         kind: payment.mode,
         occurredAt,
         providerOrMode: payment.mode === "cash" ? null : payment.providerOrMode,

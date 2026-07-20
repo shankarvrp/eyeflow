@@ -8,9 +8,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@eyeflow/ui";
-import { CalendarDays, Check, IndianRupee, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, Check, IndianRupee, Plus, ReceiptText, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { EmrPatientOption } from "../emr/emr.server";
+import type { EmrPatientOption, EmrReceiptDraft } from "../emr/emr.server";
 import {
   collectionBatchSchema,
   creditProviders,
@@ -25,12 +25,14 @@ interface AddCollectionDialogProps {
   canChooseDate: boolean;
   defaultOccurredOn: string;
   loadPatientOptions: (appointmentDate: string) => Promise<EmrPatientOption[]>;
+  loadReceiptDrafts: (appointmentDate: string, emrPatientId: string) => Promise<EmrReceiptDraft[]>;
   onAdd: (collection: NewCollectionBatch) => Promise<void>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 interface EntryLine extends NewPaymentLine {
+  externalReceiptId?: string;
   key: string;
 }
 
@@ -39,6 +41,7 @@ export function AddCollectionDialog({
   canChooseDate,
   defaultOccurredOn,
   loadPatientOptions,
+  loadReceiptDrafts,
   onAdd,
   onOpenChange,
   open,
@@ -58,6 +61,11 @@ export function AddCollectionDialog({
   const [patientOptions, setPatientOptions] = useState<EmrPatientOption[]>([]);
   const [patientOptionsLoading, setPatientOptionsLoading] = useState(false);
   const [patientPickerOpen, setPatientPickerOpen] = useState(false);
+  const [receiptDraftsLoading, setReceiptDraftsLoading] = useState(false);
+  const [receiptImportSummary, setReceiptImportSummary] = useState<{
+    imported: number;
+    needsReview: number;
+  }>();
   const [occurredOn, setOccurredOn] = useState(defaultOccurredOn);
   const [rows, setRows] = useState<EntryLine[]>(createRows);
   const [submitting, setSubmitting] = useState(false);
@@ -118,6 +126,7 @@ export function AddCollectionDialog({
     setPatient("");
     setEmrPatientId(null);
     setPatientPickerOpen(false);
+    setReceiptImportSummary(undefined);
     setOccurredOn(defaultOccurredOn);
     setRows(createRows());
     setSubmitError(undefined);
@@ -136,6 +145,48 @@ export function AddCollectionDialog({
   };
 
   const addDepartment = (department: DepartmentName) => addPayment(department);
+
+  const selectEmrPatient = async (option: EmrPatientOption) => {
+    setPatient(option.displayName);
+    setEmrPatientId(option.id);
+    setPatientPickerOpen(false);
+    setReceiptDraftsLoading(true);
+    setSubmitError(undefined);
+    try {
+      const drafts = await loadReceiptDrafts(occurredOn, option.id);
+      const mappedDrafts = drafts.filter(
+        (draft): draft is EmrReceiptDraft & { department: DepartmentName } =>
+          draft.department !== null && allowedDepartments.includes(draft.department),
+      );
+      const importedDepartments = new Set(mappedDrafts.map((draft) => draft.department));
+      const primaryBlankRows = createRows().filter(
+        (row) => !importedDepartments.has(row.department),
+      );
+      const importedRows: EntryLine[] = mappedDrafts.map((draft) => ({
+        amount: draft.amount,
+        department: draft.department,
+        discount: 0,
+        emrReceiptId: draft.receiptId,
+        externalReceiptId: draft.externalReceiptId,
+        key: `receipt-${draft.receiptId}`,
+        mode: draft.mode,
+        providerOrMode: draft.providerOrMode,
+      }));
+      setRows([...primaryBlankRows, ...importedRows]);
+      setReceiptImportSummary({
+        imported: importedRows.length,
+        needsReview: drafts.length - importedRows.length,
+      });
+    } catch (error) {
+      setRows(createRows());
+      setReceiptImportSummary(undefined);
+      setSubmitError(
+        error instanceof Error ? error.message : "Unable to load the patient’s EMR receipts.",
+      );
+    } finally {
+      setReceiptDraftsLoading(false);
+    }
+  };
 
   const removePayment = (key: string, department: DepartmentName) => {
     setRows((current) => {
@@ -210,6 +261,10 @@ export function AddCollectionDialog({
                 maxLength={120}
                 onBlur={() => setPatientPickerOpen(false)}
                 onChange={(event) => {
+                  if (emrPatientId) {
+                    setRows(createRows());
+                    setReceiptImportSummary(undefined);
+                  }
                   setPatient(event.target.value);
                   setEmrPatientId(null);
                   setPatientPickerOpen(true);
@@ -239,11 +294,7 @@ export function AddCollectionDialog({
                         <button
                           className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-[var(--subtle-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                           key={option.id}
-                          onClick={() => {
-                            setPatient(option.displayName);
-                            setEmrPatientId(option.id);
-                            setPatientPickerOpen(false);
-                          }}
+                          onClick={() => void selectEmrPatient(option)}
                           onMouseDown={(event) => event.preventDefault()}
                           role="option"
                           type="button"
@@ -288,7 +339,13 @@ export function AddCollectionDialog({
                   className="form-control pl-10"
                   disabled={!canChooseDate}
                   max={new Date().toISOString().slice(0, 10)}
-                  onChange={(event) => setOccurredOn(event.target.value)}
+                  onChange={(event) => {
+                    setOccurredOn(event.target.value);
+                    setPatient("");
+                    setEmrPatientId(null);
+                    setRows(createRows());
+                    setReceiptImportSummary(undefined);
+                  }}
                   type="date"
                   value={occurredOn}
                 />
@@ -300,6 +357,30 @@ export function AddCollectionDialog({
               <SummaryValue label="Final" value={formatCurrency(totals.net)} strong />
             </div>
           </div>
+
+          {receiptDraftsLoading ? (
+            <div className="flex items-center gap-2 rounded-2xl border border-blue-500/20 bg-blue-500/[0.06] px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
+              <RefreshIndicator />
+              Loading collection receipts from FOSS EHR…
+            </div>
+          ) : receiptImportSummary ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-sm">
+              <ReceiptText className="text-emerald-600 dark:text-emerald-300" size={17} />
+              <span className="font-semibold">
+                {receiptImportSummary.imported} receipt
+                {receiptImportSummary.imported === 1 ? "" : "s"} prefilled
+              </span>
+              <span className="text-[var(--muted-strong)]">
+                Review, change, remove, or add payments before saving.
+              </span>
+              {receiptImportSummary.needsReview > 0 ? (
+                <span className="rounded-full bg-amber-500/15 px-2 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                  {receiptImportSummary.needsReview} unmapped receipt
+                  {receiptImportSummary.needsReview === 1 ? "" : "s"} need manual entry
+                </span>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="space-y-3">
             {availableDepartments.length > 0 ? (
@@ -446,6 +527,11 @@ function PaymentEntryRow({
           <option value="credit">Credit</option>
           <option value="online">Online</option>
         </select>
+        {row.externalReceiptId ? (
+          <span className="mt-1 block text-[10px] font-semibold text-emerald-600 dark:text-emerald-300">
+            EMR · {row.externalReceiptId}
+          </span>
+        ) : null}
       </td>
       <td className="px-3 py-3">
         <MoneyInput
@@ -470,6 +556,9 @@ function PaymentEntryRow({
             value={row.providerOrMode ?? ""}
           >
             <option value="">Select</option>
+            {row.providerOrMode && !options.includes(row.providerOrMode as never) ? (
+              <option value={row.providerOrMode}>{row.providerOrMode}</option>
+            ) : null}
             {options.map((option) => (
               <option key={option}>{option}</option>
             ))}
@@ -499,6 +588,15 @@ function PaymentEntryRow({
         </Button>
       </td>
     </tr>
+  );
+}
+
+function RefreshIndicator() {
+  return (
+    <span
+      aria-hidden="true"
+      className="size-4 animate-spin rounded-full border-2 border-blue-500/25 border-t-blue-600"
+    />
   );
 }
 

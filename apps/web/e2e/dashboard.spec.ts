@@ -40,7 +40,7 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Good morning, Dr. Shankar" })).toBeVisible();
   await expect(page.getByText("Collection revenue")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add collection" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sync patients" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sync EMR" })).toBeVisible();
   await expect(page.getByText("Daily target")).toBeVisible();
   await expect(page.getByText("Weekly target")).toBeVisible();
   await expect(page.getByText("Monthly target")).toBeVisible();

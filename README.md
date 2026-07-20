@@ -67,23 +67,27 @@ docker compose up --build
 | `pnpm emr:login` | Fallback: establish the FOSS EHR session from a terminal |
 | `pnpm emr:sync [YYYY-MM-DD]` | Fallback: synchronize an explicit date from a terminal |
 
-## FOSS EHR patient synchronization
+## FOSS EHR patient and receipt synchronization
 
 FOSS EHR does not expose a supported patient API, so EyeFlow uses an operator-controlled
 Playwright browser profile. An administrator selects **Connect EMR** on the dashboard and completes
 the login in the private browser window that EyeFlow opens. EyeFlow stores only the resulting local
 browser profile under `.eyeflow/`; it never requests or stores the EMR password.
 
-Once connected, any signed-in user can select **Sync patients** for the active day. EyeFlow also
-synchronizes today's appointments at the interval configured by `EMR_SYNC_INTERVAL_MINUTES`
+Once connected, any signed-in user can select **Sync EMR** for the active day. EyeFlow synchronizes
+both appointments and **Receipts → All Collection Receipts** at the interval configured by `EMR_SYNC_INTERVAL_MINUTES`
 (15 minutes by default) while at least one authenticated dashboard is open. The terminal commands
 remain available as recovery and diagnostic tools, but they are not required for routine use.
 
-The connector imports only the stable patient
-number, display name, appointment identifier/date, and visit type. It deliberately excludes phone
-numbers and clinical details. In Add Collection, the patient field becomes a searchable picker for
+The connector imports the stable patient number, display name, appointment identifier/date, visit
+type, receipt identifier/date, source department, payment mode, and amount. It deliberately excludes
+phone numbers, credentials, and clinical details; receipt remarks are used transiently for mapping
+and are not stored. In Add Collection, the patient field becomes a searchable picker for
 the selected collection date. Patients without an existing EyeFlow record carry a green **New**
-badge; selecting one links future collections by stable EMR patient number rather than by name.
+badge. Selecting a patient prefills unused receipts as editable department payment drafts. Known
+labels are mapped deterministically (including IPD/surgery to OT); refunds and unknown labels are
+flagged for manual review. Nothing becomes a final EyeFlow transaction until the user saves, and a
+stored receipt-to-payment link prevents duplicate submission.
 
 The connector is intended for a trusted local host with a graphical browser environment. The saved
 EMR session is sensitive, is ignored by Git, and must not be copied into images or shared storage.

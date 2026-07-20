@@ -2,6 +2,7 @@ import { access, mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "playwright";
 import type { EmrAppointmentImport } from "./emr.server";
+import { type EmrReceiptImport, parseEmrReceiptPdf } from "./emr-receipt-parser";
 import {
   type AppointmentListEntry,
   parseAppointmentListEntry,
@@ -31,6 +32,13 @@ async function ensureProfileDirectory(): Promise<void> {
 function appointmentsUrl(date: string): string {
   const url = new URL("/clinical/opd/appointments", baseUrl());
   url.searchParams.set("current_date", date);
+  return url.toString();
+}
+
+function receiptsUrl(date: string): string {
+  const url = new URL("/reports/daily_collection_report.pdf", baseUrl());
+  url.searchParams.set("date", date);
+  url.searchParams.set("location", "All Collection");
   return url.toString();
 }
 
@@ -135,6 +143,31 @@ export async function scrapeEmrAppointments(date: string): Promise<EmrAppointmen
         });
       }
 
+      await writeFile(sessionMarkerPath(), new Date().toISOString(), {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      return records;
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+export async function scrapeEmrReceipts(date: string): Promise<EmrReceiptImport[]> {
+  return exclusiveBrowserOperation(async () => {
+    if (!(await hasConnectedEmrSession())) {
+      throw new Error("EMR connection required. Ask an administrator to connect the EMR.");
+    }
+    const { chromium } = await import("playwright");
+    const context = await chromium.launchPersistentContext(profileDirectory(), { headless: true });
+    try {
+      const response = await context.request.get(receiptsUrl(date));
+      if (!response.ok() || !response.headers()["content-type"]?.includes("application/pdf")) {
+        await invalidateSessionMarker();
+        throw new Error("The EMR session expired or the collection report is unavailable.");
+      }
+      const records = await parseEmrReceiptPdf(new Uint8Array(await response.body()), date);
       await writeFile(sessionMarkerPath(), new Date().toISOString(), {
         encoding: "utf8",
         mode: 0o600,
