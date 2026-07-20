@@ -128,19 +128,25 @@ export async function scrapeEmrAppointments(date: string): Promise<EmrAppointmen
 
       const records: EmrAppointmentImport[] = [];
       for (const appointment of appointments.values()) {
-        await page.goto(new URL(appointment.href, baseUrl()).toString(), {
-          waitUntil: "domcontentloaded",
-        });
-        await page.getByText("Patient ID", { exact: true }).waitFor({ timeout: 10_000 });
-        const externalPatientId = parseExternalPatientId(await page.locator("body").innerText());
-        if (!externalPatientId) continue;
-        records.push({
-          appointmentDate: date,
-          externalAppointmentId: appointment.appointmentId,
-          externalPatientId,
-          patientName: appointment.patientName,
-          visitType: appointment.visitType,
-        });
+        try {
+          await page.goto(new URL(appointment.href, baseUrl()).toString(), {
+            timeout: 20_000,
+            waitUntil: "commit",
+          });
+          await page.getByText("Patient ID", { exact: true }).waitFor({ timeout: 15_000 });
+          const externalPatientId = parseExternalPatientId(await page.locator("body").innerText());
+          if (!externalPatientId) continue;
+          records.push({
+            appointmentDate: date,
+            externalAppointmentId: appointment.appointmentId,
+            externalPatientId,
+            patientName: appointment.patientName,
+            visitType: appointment.visitType,
+          });
+        } catch {
+          // A single slow or malformed EMR appointment must not prevent the day's
+          // receipt synchronization or the remaining patient list from completing.
+        }
       }
 
       await writeFile(sessionMarkerPath(), new Date().toISOString(), {

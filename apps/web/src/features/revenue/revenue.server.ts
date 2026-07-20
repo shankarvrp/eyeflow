@@ -2,6 +2,7 @@ import { createDatabase } from "@eyeflow/db";
 import {
   auditEvents,
   customers,
+  dailyClosures,
   departments,
   emrPatients,
   emrReceipts,
@@ -153,6 +154,7 @@ export async function readDashboardData(
       customerId: customers.id,
       department: departments.name,
       discount: payments.discount,
+      emrReceiptId: payments.emrReceiptId,
       id: payments.id,
       kind: payments.kind,
       occurredAt: payments.occurredAt,
@@ -214,6 +216,31 @@ export async function readDashboardData(
               ),
             )
             .orderBy(desc(emrReceipts.occurredAt));
+
+  const reconciliationRows = isAdmin
+    ? await db
+        .select({
+          amount: emrReceipts.amount,
+          receiptType: emrReceipts.receiptType,
+          requiresReview: emrReceipts.requiresReview,
+        })
+        .from(emrReceipts)
+        .where(
+          and(gte(emrReceipts.occurredAt, bounds.start), lt(emrReceipts.occurredAt, bounds.end)),
+        )
+    : [];
+  const [closure] =
+    isAdmin && query.from === query.to
+      ? await db
+          .select({
+            closedAt: dailyClosures.closedAt,
+            reason: dailyClosures.reason,
+            status: dailyClosures.status,
+          })
+          .from(dailyClosures)
+          .where(eq(dailyClosures.businessDate, query.from))
+          .limit(1)
+      : [];
 
   const departmentQuery = db.select({ name: departments.name }).from(departments);
   const departmentRows =
@@ -332,6 +359,15 @@ export async function readDashboardData(
   const patientOffset = (query.patientPage - 1) * query.pageSize;
 
   return {
+    ...(isAdmin && query.from === query.to
+      ? {
+          closure: {
+            closedAt: closure?.closedAt.toISOString() ?? null,
+            reason: closure?.reason ?? null,
+            status: closure?.status === "closed" ? ("closed" as const) : ("open" as const),
+          },
+        }
+      : {}),
     departments: departmentSummaries,
     filter: { from: query.from, to: query.to },
     pagination: {
@@ -343,6 +379,11 @@ export async function readDashboardData(
     },
     patientCollections: allPatientCollections.slice(patientOffset, patientOffset + query.pageSize),
     recentCollections,
+    ...(isAdmin
+      ? {
+          reconciliation: buildReconciliation(reconciliationRows, persistedRows),
+        }
+      : {}),
     summary: {
       ...totals,
       patients: patientIds.size,
@@ -357,6 +398,46 @@ export async function readDashboardData(
           }
         : {}),
     },
+  };
+}
+
+export function buildReconciliation(
+  receipts: Array<{ amount: string; receiptType: string; requiresReview: boolean }>,
+  persistedRows: Array<{
+    amount: string;
+    discount: string;
+    emrReceiptId: string | null;
+  }>,
+) {
+  let importedGross = 0;
+  let importedNet = 0;
+  let refundTotal = 0;
+  let reviewLines = 0;
+
+  for (const receipt of receipts) {
+    const amount = Number(receipt.amount);
+    importedGross += amount;
+    if (/refund/i.test(receipt.receiptType)) {
+      refundTotal += amount;
+      importedNet -= amount;
+    } else if (receipt.requiresReview) {
+      reviewLines += 1;
+    } else {
+      importedNet += amount;
+    }
+  }
+
+  const manualNet = persistedRows
+    .filter((payment) => payment.emrReceiptId === null)
+    .reduce((total, payment) => total + Number(payment.amount) - Number(payment.discount), 0);
+
+  return {
+    importedGross,
+    importedNet,
+    manualNet,
+    refundTotal,
+    reviewLines,
+    sourceLines: receipts.length,
   };
 }
 

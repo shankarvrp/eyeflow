@@ -5,8 +5,10 @@ import {
   requireDepartmentPermission,
   requireRevenuePermission,
 } from "../auth/auth.server";
+import { assertCollectionDatesOpen } from "../closure/closure.server";
 import { publishCollectionChanged } from "./collection-events.server";
 import {
+  clinicDateKey,
   dashboardQuerySchema,
   defaultDashboardQuery,
   validateCollectionDate,
@@ -51,6 +53,7 @@ export const createCollectionBatch = createServerFn({ method: "POST" })
     const session = await requireRevenuePermission("create");
     const isAdmin = isAdminRole(session.user.role);
     validateCollectionDate(data.occurredOn, isAdmin);
+    await assertCollectionDatesOpen([data.occurredOn]);
 
     await Promise.all(
       data.payments.map((payment) =>
@@ -84,6 +87,7 @@ export const updateCollection = createServerFn({ method: "POST" })
     if (!payment) {
       throw new Response("Collection not found.", { status: 404 });
     }
+    await assertCollectionDatesOpen([clinicDateKey(payment.occurredAt)]);
 
     const action = isTodayInClinicTime(payment.occurredAt) ? "edit-current" : "edit-history";
     const session = await requireRevenuePermission(action);
@@ -120,6 +124,10 @@ export const updatePatientWorkspace = createServerFn({ method: "POST" })
     if (storedCollections.length !== collectionIds.length) {
       throw new Response("One or more patient collections were not found.", { status: 404 });
     }
+    await assertCollectionDatesOpen([
+      ...storedCollections.map((collection) => clinicDateKey(collection.occurredAt)),
+      ...data.newCollections.map((collection) => collection.occurredOn),
+    ]);
 
     if (storedCollections.length > 0) {
       const hasHistoricalCollection = storedCollections.some(

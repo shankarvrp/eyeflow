@@ -52,10 +52,10 @@ export const connectEmr = createServerFn({ method: "POST" })
     }
 
     await connectEmrBrowser();
-    const records = await scrapeEmrAppointments(data.appointmentDate);
-    await importEmrAppointments(records, session.user.id, data.appointmentDate);
     const receipts = await scrapeEmrReceipts(data.appointmentDate);
     await importEmrReceipts(receipts, session.user.id, data.appointmentDate);
+    const records = await scrapeEmrAppointments(data.appointmentDate);
+    await importEmrAppointments(records, session.user.id, data.appointmentDate);
     return readEmrSyncStatus(data.appointmentDate, true);
   });
 
@@ -63,9 +63,9 @@ export const syncEmrNow = createServerFn({ method: "POST" })
   .validator(emrPatientQuerySchema)
   .handler(async ({ data }) => {
     const session = await requireRevenuePermission("read");
-    const records = await scrapeEmrAppointments(data.appointmentDate);
-    await importEmrAppointments(records, session.user.id, data.appointmentDate);
     const receipts = await scrapeEmrReceipts(data.appointmentDate);
     await importEmrReceipts(receipts, session.user.id, data.appointmentDate);
+    const records = await scrapeEmrAppointments(data.appointmentDate);
+    await importEmrAppointments(records, session.user.id, data.appointmentDate);
     return readEmrSyncStatus(data.appointmentDate, true);
   });

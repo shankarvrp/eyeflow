@@ -25,10 +25,10 @@ const [administrator] = await db
   .limit(1);
 if (!administrator) throw new Error("Seed an EyeFlow administrator before synchronizing the EMR.");
 
-const appointments = await scrapeEmrAppointments(requestedDate);
-await importEmrAppointments(appointments, administrator.id, requestedDate);
 const receipts = await scrapeEmrReceipts(requestedDate);
 await importEmrReceipts(receipts, administrator.id, requestedDate);
+const appointments = await scrapeEmrAppointments(requestedDate);
+await importEmrAppointments(appointments, administrator.id, requestedDate);
 
 stdout.write(
   `Synchronized ${appointments.length} patient appointment${appointments.length === 1 ? "" : "s"} and ${receipts.length} collection receipt${receipts.length === 1 ? "" : "s"} for ${requestedDate}.\n`,

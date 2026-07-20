@@ -15,16 +15,20 @@ import {
   FileText,
   IndianRupee,
   Link2,
+  LockKeyhole,
   Pencil,
   Plus,
   Radio,
   ReceiptText,
   RefreshCw,
+  Scale,
   Smartphone,
+  UnlockKeyhole,
   Users,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "../components/app-shell";
+import { closeDay, reopenDay } from "../features/closure/closure.functions";
 import {
   formatCurrency,
   type PatientCollectionSummary,
@@ -83,6 +87,11 @@ function Dashboard() {
   );
   const [pagination, setPagination] = useState(loaderData.dashboard.pagination);
   const [targets, setTargets] = useState(loaderData.dashboard.targets);
+  const [reconciliation, setReconciliation] = useState(loaderData.dashboard.reconciliation);
+  const [closure, setClosure] = useState(loaderData.dashboard.closure);
+  const [closureReason, setClosureReason] = useState("");
+  const [closureOperation, setClosureOperation] = useState(false);
+  const [closureError, setClosureError] = useState<string>();
   const [query, setQuery] = useState<DashboardQuery>(initialDashboardQuery);
   const [draftFrom, setDraftFrom] = useState(initialDashboardQuery.from);
   const [draftTo, setDraftTo] = useState(initialDashboardQuery.to);
@@ -118,6 +127,8 @@ function Dashboard() {
     setDepartments(updatedDashboard.departments);
     setSummary(updatedDashboard.summary);
     setTargets(updatedDashboard.targets);
+    setReconciliation(updatedDashboard.reconciliation);
+    setClosure(updatedDashboard.closure);
     setPagination(updatedDashboard.pagination);
   }, []);
   const loadEmrPatientOptions = useCallback(
@@ -235,6 +246,27 @@ function Dashboard() {
     await loadDashboard(query);
   };
 
+  const changeClosure = async () => {
+    if (query.from !== query.to || closureReason.trim().length < 3) {
+      setClosureError("Enter a reason of at least 3 characters for a single selected day.");
+      return;
+    }
+    try {
+      setClosureOperation(true);
+      setClosureError(undefined);
+      const updatedDashboard =
+        closure?.status === "closed"
+          ? await reopenDay({ data: { businessDate: query.from, reason: closureReason } })
+          : await closeDay({ data: { businessDate: query.from, reason: closureReason } });
+      applyDashboard(updatedDashboard);
+      setClosureReason("");
+    } catch (error) {
+      setClosureError(error instanceof Error ? error.message : "Unable to update daily closure.");
+    } finally {
+      setClosureOperation(false);
+    }
+  };
+
   const moveOneDay = (days: number) => {
     const nextDate = shiftDateKey(query.from, days);
     void loadDashboard({
@@ -349,6 +381,92 @@ function Dashboard() {
           </div>
           {emrMessage ? <p className="basis-full text-xs font-medium">{emrMessage}</p> : null}
         </output>
+
+        {isAdmin && reconciliation ? (
+          <article className="panel mb-5 p-4 sm:p-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="metric-icon metric-icon-blue mt-0.5">
+                  <Scale size={18} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold">Collection reconciliation</h2>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    {reconciliation.sourceLines} EMR receipt lines compared with EyeFlow entries for
+                    the active period.
+                  </p>
+                </div>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
+                <ReconciliationValue
+                  label="EMR gross receipts"
+                  value={reconciliation.importedGross}
+                />
+                <ReconciliationValue label="Refunds deducted" value={-reconciliation.refundTotal} />
+                <ReconciliationValue label="EMR net" value={reconciliation.importedNet} />
+                <ReconciliationValue label="Manual net" value={reconciliation.manualNet} />
+              </dl>
+            </div>
+            <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border)] pt-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-xs font-semibold">
+                  {closure?.status === "closed" ? (
+                    <LockKeyhole className="text-amber-500" size={14} />
+                  ) : (
+                    <UnlockKeyhole className="text-emerald-500" size={14} />
+                  )}
+                  {closure?.status === "closed" ? "Day closed and entries locked" : "Day open"}
+                </p>
+                {closure?.reason ? (
+                  <p className="mt-1 text-xs text-[var(--muted)]">Reason: {closure.reason}</p>
+                ) : null}
+              </div>
+              {query.from === query.to ? (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <label>
+                    <span className="form-label">
+                      {closure?.status === "closed" ? "Reopen reason" : "Closure note"}
+                    </span>
+                    <input
+                      className="form-control w-full sm:w-72"
+                      onChange={(event) => setClosureReason(event.target.value)}
+                      placeholder="Verified against cash drawer"
+                      value={closureReason}
+                    />
+                  </label>
+                  <Button
+                    disabled={closureOperation || closureReason.trim().length < 3}
+                    onClick={() => void changeClosure()}
+                    variant={closure?.status === "closed" ? "outline" : "default"}
+                  >
+                    {closure?.status === "closed" ? (
+                      <UnlockKeyhole size={15} />
+                    ) : (
+                      <LockKeyhole size={15} />
+                    )}
+                    {closureOperation
+                      ? "Saving…"
+                      : closure?.status === "closed"
+                        ? "Reopen day"
+                        : "Close day"}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+            {closureError ? (
+              <p className="mt-3 text-xs font-medium text-rose-700 dark:text-rose-300">
+                {closureError}
+              </p>
+            ) : null}
+            {reconciliation.reviewLines > 0 ? (
+              <p className="mt-3 text-xs font-medium text-amber-700 dark:text-amber-300">
+                {reconciliation.reviewLines} non-refund receipt line
+                {reconciliation.reviewLines === 1 ? " requires" : "s require"} mapping review and is
+                not included in the collection total.
+              </p>
+            ) : null}
+          </article>
+        ) : null}
 
         <div className="panel mb-5 flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex flex-wrap items-end gap-2">
@@ -887,6 +1005,15 @@ function Dashboard() {
         workspace={selectedPatient}
       />
     </AppShell>
+  );
+}
+
+function ReconciliationValue({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <dt className="text-[11px] font-medium text-[var(--muted)]">{label}</dt>
+      <dd className="mt-1 text-sm font-bold tabular-nums">{formatCurrency(value)}</dd>
+    </div>
   );
 }
 

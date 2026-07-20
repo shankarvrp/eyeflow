@@ -207,6 +207,25 @@ export const payments = pgTable(
   ],
 );
 
+export const dailyClosures = pgTable(
+  "daily_closures",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    businessDate: date("business_date").notNull(),
+    status: text("status").notNull().default("closed"),
+    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+    reason: text("reason").notNull(),
+    closedByUserId: text("closed_by_user_id")
+      .notNull()
+      .references(() => user.id),
+    closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
+    reopenedByUserId: text("reopened_by_user_id").references(() => user.id),
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("daily_closures_business_date_uidx").on(table.businessDate)],
+);
+
 export const userDepartmentAccess = pgTable(
   "user_department_access",
   {

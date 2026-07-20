@@ -42,6 +42,11 @@ export interface DashboardSummary {
 }
 
 export interface DashboardData {
+  closure?: {
+    closedAt: string | null;
+    reason: string | null;
+    status: "closed" | "open";
+  };
   departments: DepartmentSummary[];
   filter: { from: string; to: string };
   pagination: {
@@ -53,6 +58,14 @@ export interface DashboardData {
   };
   patientCollections: PatientCollectionSummary[];
   recentCollections: RecentCollection[];
+  reconciliation?: {
+    importedGross: number;
+    importedNet: number;
+    manualNet: number;
+    refundTotal: number;
+    reviewLines: number;
+    sourceLines: number;
+  };
   summary: DashboardSummary;
   targets: {
     daily: TargetProgress;
