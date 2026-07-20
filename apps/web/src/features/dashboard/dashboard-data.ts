@@ -17,6 +17,7 @@ export interface RecentCollection {
   occurredAt: string;
   patient: string;
   providerOrMode: string | null;
+  source: "emr" | "eyeflow";
   time: string;
 }
 
@@ -95,6 +96,7 @@ export const recentCollections: RecentCollection[] = [
     amount: 1250,
     occurredAt: new Date().toISOString(),
     providerOrMode: "UPI",
+    source: "eyeflow",
     time: "10:42 AM",
   },
   {
@@ -107,6 +109,7 @@ export const recentCollections: RecentCollection[] = [
     amount: 4800,
     occurredAt: new Date().toISOString(),
     providerOrMode: null,
+    source: "eyeflow",
     time: "10:36 AM",
   },
   {
@@ -119,6 +122,7 @@ export const recentCollections: RecentCollection[] = [
     amount: 3200,
     occurredAt: new Date().toISOString(),
     providerOrMode: "CGHS",
+    source: "eyeflow",
     time: "10:28 AM",
   },
   {
@@ -131,6 +135,7 @@ export const recentCollections: RecentCollection[] = [
     amount: 1840,
     occurredAt: new Date().toISOString(),
     providerOrMode: "UPI",
+    source: "eyeflow",
     time: "10:15 AM",
   },
 ];

@@ -7,7 +7,7 @@ import {
   emrReceipts,
   payments,
 } from "@eyeflow/db/schema";
-import { and, desc, eq, gte, ilike, inArray, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import type {
   DashboardData,
   DepartmentSummary,
@@ -85,15 +85,59 @@ export async function readCollectionExportRows(
             )
             .orderBy(desc(payments.occurredAt));
 
-  return rows.map((row) => ({
-    amount: Number(row.amount),
-    department: row.department,
-    discount: Number(row.discount),
-    mode: paymentModeLabels[row.kind],
-    occurredAt: row.occurredAt,
-    patient: row.patient,
-    providerOrMode: row.providerOrMode,
-  }));
+  const receiptQuery = db
+    .select({
+      amount: emrReceipts.amount,
+      department: emrReceipts.mappedDepartment,
+      kind: emrReceipts.mappedMode,
+      occurredAt: emrReceipts.occurredAt,
+      patient: emrPatients.displayName,
+      providerOrMode: emrReceipts.mappedProviderOrMode,
+    })
+    .from(emrReceipts)
+    .innerJoin(emrPatients, eq(emrReceipts.emrPatientId, emrPatients.id))
+    .leftJoin(payments, eq(payments.emrReceiptId, emrReceipts.id));
+  const receiptConditions = [
+    gte(emrReceipts.occurredAt, bounds.start),
+    lt(emrReceipts.occurredAt, bounds.end),
+    eq(emrReceipts.requiresReview, false),
+    isNotNull(emrReceipts.mappedDepartment),
+    isNull(payments.id),
+  ];
+  const receiptRows =
+    accessibleDepartmentNames === null
+      ? await receiptQuery.where(and(...receiptConditions)).orderBy(desc(emrReceipts.occurredAt))
+      : accessibleDepartmentNames.length === 0
+        ? []
+        : await receiptQuery
+            .where(
+              and(
+                ...receiptConditions,
+                inArray(emrReceipts.mappedDepartment, accessibleDepartmentNames),
+              ),
+            )
+            .orderBy(desc(emrReceipts.occurredAt));
+
+  return [
+    ...rows.map((row) => ({
+      amount: Number(row.amount),
+      department: row.department,
+      discount: Number(row.discount),
+      mode: paymentModeLabels[row.kind],
+      occurredAt: row.occurredAt,
+      patient: row.patient,
+      providerOrMode: row.providerOrMode,
+    })),
+    ...receiptRows.map((row) => ({
+      amount: Number(row.amount),
+      department: row.department ?? "Unmapped",
+      discount: 0,
+      mode: paymentModeLabels[row.kind],
+      occurredAt: row.occurredAt,
+      patient: row.patient,
+      providerOrMode: row.providerOrMode,
+    })),
+  ].sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
 }
 
 export async function readDashboardData(
@@ -136,6 +180,41 @@ export async function readDashboardData(
             )
             .orderBy(desc(payments.occurredAt));
 
+  const receiptQuery = db
+    .select({
+      amount: emrReceipts.amount,
+      department: emrReceipts.mappedDepartment,
+      id: emrReceipts.id,
+      kind: emrReceipts.mappedMode,
+      occurredAt: emrReceipts.occurredAt,
+      patient: emrPatients.displayName,
+      patientId: emrPatients.id,
+      providerOrMode: emrReceipts.mappedProviderOrMode,
+    })
+    .from(emrReceipts)
+    .innerJoin(emrPatients, eq(emrReceipts.emrPatientId, emrPatients.id))
+    .leftJoin(payments, eq(payments.emrReceiptId, emrReceipts.id));
+  const receiptConditions = [
+    gte(emrReceipts.occurredAt, bounds.start),
+    lt(emrReceipts.occurredAt, bounds.end),
+    eq(emrReceipts.requiresReview, false),
+    isNotNull(emrReceipts.mappedDepartment),
+    isNull(payments.id),
+  ];
+  const receiptRows =
+    accessibleDepartmentNames === null
+      ? await receiptQuery.where(and(...receiptConditions)).orderBy(desc(emrReceipts.occurredAt))
+      : accessibleDepartmentNames.length === 0
+        ? []
+        : await receiptQuery
+            .where(
+              and(
+                ...receiptConditions,
+                inArray(emrReceipts.mappedDepartment, accessibleDepartmentNames),
+              ),
+            )
+            .orderBy(desc(emrReceipts.occurredAt));
+
   const departmentQuery = db.select({ name: departments.name }).from(departments);
   const departmentRows =
     accessibleDepartmentNames === null
@@ -151,11 +230,25 @@ export async function readDashboardData(
   const todayKey = dateKey(new Date());
   const weekStartKey = startOfWeekKey(new Date());
   const monthKey = todayKey.slice(0, 7);
-  const todayRows = paymentRows;
-  const weeklyRows = paymentRows.filter((payment) => dateKey(payment.occurredAt) >= weekStartKey);
-  const monthlyRows = paymentRows.filter((payment) =>
-    dateKey(payment.occurredAt).startsWith(monthKey),
+  const importedRows = receiptRows.map((receipt) => ({
+    amount: receipt.amount,
+    customerId: `emr:${receipt.patientId}`,
+    department: receipt.department ?? "OPD",
+    discount: "0",
+    id: receipt.id,
+    kind: receipt.kind,
+    occurredAt: receipt.occurredAt,
+    patient: receipt.patient,
+    providerOrMode: receipt.providerOrMode,
+    source: "emr" as const,
+  }));
+  const persistedRows = paymentRows.map((payment) => ({ ...payment, source: "eyeflow" as const }));
+  const allRows = [...persistedRows, ...importedRows].sort(
+    (left, right) => right.occurredAt.getTime() - left.occurredAt.getTime(),
   );
+  const todayRows = allRows;
+  const weeklyRows = allRows.filter((payment) => dateKey(payment.occurredAt) >= weekStartKey);
+  const monthlyRows = allRows.filter((payment) => dateKey(payment.occurredAt).startsWith(monthKey));
 
   const totals = {
     cash: 0,
@@ -189,9 +282,9 @@ export async function readDashboardData(
     name: department.name as DepartmentSummary["name"],
   }));
 
-  const toRecentCollection = (payment: (typeof paymentRows)[number]): RecentCollection => ({
+  const toRecentCollection = (payment: (typeof allRows)[number]): RecentCollection => ({
     amount: Number(payment.amount) - Number(payment.discount),
-    canEdit: isAdmin || dateKey(payment.occurredAt) === todayKey,
+    canEdit: payment.source === "eyeflow" && (isAdmin || dateKey(payment.occurredAt) === todayKey),
     department: payment.department as RecentCollection["department"],
     discount: Number(payment.discount),
     id: payment.id,
@@ -199,18 +292,19 @@ export async function readDashboardData(
     occurredAt: payment.occurredAt.toISOString(),
     patient: payment.patient,
     providerOrMode: payment.providerOrMode,
+    source: payment.source,
     time: payment.occurredAt.toLocaleTimeString("en-IN", {
       hour: "2-digit",
       minute: "2-digit",
     }),
   });
   const collectionOffset = (query.collectionPage - 1) * query.pageSize;
-  const recentCollections = paymentRows
+  const recentCollections = allRows
     .slice(collectionOffset, collectionOffset + query.pageSize)
     .map(toRecentCollection);
 
   const patientGroups = new Map<string, PatientCollectionSummary>();
-  for (const payment of paymentRows) {
+  for (const payment of persistedRows) {
     let group = patientGroups.get(payment.customerId);
     if (!group) {
       group = {
@@ -244,7 +338,7 @@ export async function readDashboardData(
       collectionPage: query.collectionPage,
       pageSize: query.pageSize,
       patientPage: query.patientPage,
-      totalCollections: paymentRows.length,
+      totalCollections: allRows.length,
       totalPatients: allPatientCollections.length,
     },
     patientCollections: allPatientCollections.slice(patientOffset, patientOffset + query.pageSize),

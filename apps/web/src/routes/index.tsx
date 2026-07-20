@@ -23,7 +23,7 @@ import {
   Smartphone,
   Users,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "../components/app-shell";
 import {
   formatCurrency,
@@ -93,6 +93,7 @@ function Dashboard() {
   const [emrStatus, setEmrStatus] = useState(loaderData.emrStatus);
   const [emrOperation, setEmrOperation] = useState<"connecting" | "idle" | "syncing">("idle");
   const [emrMessage, setEmrMessage] = useState<string>();
+  const initialEmrSyncStarted = useRef(false);
   const isAdmin = loaderData.session.user.role?.split(",").includes("admin") ?? false;
   const todayLabel = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
@@ -129,21 +130,26 @@ function Dashboard() {
     [],
   );
 
-  const synchronizeEmr = useCallback(async (appointmentDate: string, scheduled = false) => {
-    try {
-      setEmrOperation("syncing");
-      if (!scheduled) setEmrMessage(undefined);
-      const status = await syncEmrNow({ data: { appointmentDate } });
-      setEmrStatus(status);
-      setEmrMessage(
-        `${status.patientCount} patient${status.patientCount === 1 ? "" : "s"} and ${status.receiptCount} receipt${status.receiptCount === 1 ? "" : "s"} synchronized for ${appointmentDate}.`,
-      );
-    } catch (error) {
-      setEmrMessage(error instanceof Error ? error.message : "Unable to synchronize the EMR.");
-    } finally {
-      setEmrOperation("idle");
-    }
-  }, []);
+  const synchronizeEmr = useCallback(
+    async (appointmentDate: string, scheduled = false) => {
+      try {
+        setEmrOperation("syncing");
+        if (!scheduled) setEmrMessage(undefined);
+        const status = await syncEmrNow({ data: { appointmentDate } });
+        const refreshedDashboard = await getDashboardData({ data: query });
+        setEmrStatus(status);
+        applyDashboard(refreshedDashboard.dashboard);
+        setEmrMessage(
+          `${status.patientCount} patient${status.patientCount === 1 ? "" : "s"} and ${status.receiptCount} receipt${status.receiptCount === 1 ? "" : "s"} synchronized for ${appointmentDate}.`,
+        );
+      } catch (error) {
+        setEmrMessage(error instanceof Error ? error.message : "Unable to synchronize the EMR.");
+      } finally {
+        setEmrOperation("idle");
+      }
+    },
+    [applyDashboard, query],
+  );
 
   const connectToEmr = useCallback(async () => {
     try {
@@ -164,6 +170,12 @@ function Dashboard() {
   }, []);
 
   useEffect(() => setReady(true), []);
+
+  useEffect(() => {
+    if (!ready || !emrStatus.connected || initialEmrSyncStarted.current) return;
+    initialEmrSyncStarted.current = true;
+    void synchronizeEmr(initialDashboardQuery.to, true);
+  }, [emrStatus.connected, ready, synchronizeEmr]);
 
   useEffect(() => {
     if (!ready || !emrStatus.connected) return;
@@ -670,7 +682,16 @@ function Dashboard() {
                               .map((part) => part[0])
                               .join("")}
                           </span>
-                          <span className="text-sm font-semibold">{collection.patient}</span>
+                          <span>
+                            <span className="block text-sm font-semibold">
+                              {collection.patient}
+                            </span>
+                            {collection.source === "emr" ? (
+                              <span className="mt-1 inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                                Synced receipt
+                              </span>
+                            ) : null}
+                          </span>
                         </div>
                       </td>
                       <td className="px-4 py-4">
@@ -686,7 +707,11 @@ function Dashboard() {
                         {formatCurrency(collection.amount)}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        {collection.canEdit ? (
+                        {collection.source === "emr" ? (
+                          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                            Review in Add Collection
+                          </span>
+                        ) : collection.canEdit ? (
                           <Button
                             aria-label={`Edit ${collection.patient} ${collection.department} ${collection.mode}`}
                             onClick={() => {

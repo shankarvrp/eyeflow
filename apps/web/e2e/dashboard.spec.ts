@@ -57,7 +57,7 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
 });
 
 test("adds collections for multiple departments in one save", async ({ page }) => {
-  const patientName = `Persistence Patient ${Date.now()}`;
+  const patientName = `E2E Test Admin Patient ${Date.now()}`;
   const updatedPatientName = `${patientName} Updated`;
   await signIn(page);
   await page.getByRole("button", { name: "Add collection" }).click();
@@ -102,7 +102,7 @@ test("adds collections for multiple departments in one save", async ({ page }) =
 });
 
 test("normal users see only daily targets and can edit today's collections", async ({ page }) => {
-  const patientName = `User Collection ${Date.now()}`;
+  const patientName = `E2E Test User Patient ${Date.now()}`;
   await signIn(page, {
     email: "user@eyeflow.local",
     password: "EyeFlowUser123!",

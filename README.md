@@ -89,6 +89,11 @@ labels are mapped deterministically (including IPD/surgery to OT); refunds and u
 flagged for manual review. Nothing becomes a final EyeFlow transaction until the user saves, and a
 stored receipt-to-payment link prevents duplicate submission.
 
+Mapped, unused receipts also appear in Recent Collections, summaries, pagination, and exports with
+a **Synced receipt** badge. Once reviewed and saved, the linked EyeFlow payment replaces the imported
+row without double-counting. A connected dashboard starts one non-blocking synchronization for today
+when it loads, then continues on the configured interval.
+
 The connector is intended for a trusted local host with a graphical browser environment. The saved
 EMR session is sensitive, is ignored by Git, and must not be copied into images or shared storage.
 Closing every EyeFlow dashboard pauses automatic synchronization; the manual button remains the

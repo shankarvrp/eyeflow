@@ -56,6 +56,9 @@ the final payment retains receipt provenance to enforce one-time use. Refunds an
 labels must be flagged rather than silently converted into positive collections. UI selectors and
 the collection-report PDF layout are integration contracts and must be covered by parser tests
 because the upstream product does not provide a supported API.
+Mapped, unconsumed receipts participate in collection reads and exports as explicitly labeled source
+rows. Queries must exclude them after a linked payment exists so financial totals never double-count.
+End-to-end tests must remove their generated customers, payments, and audit events during teardown.
 Only administrators may create or replace the browser session. Authenticated revenue users may run
 a manual synchronization, and the dashboard schedules the same audited server operation while it is
 open. Do not move browser credentials, cookies, or profile contents into application tables. A
