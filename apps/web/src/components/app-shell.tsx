@@ -1,4 +1,5 @@
 import { Button, cn } from "@eyeflow/ui";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
   BarChart3,
@@ -20,10 +21,10 @@ import { authClient } from "../lib/auth-client";
 import { ThemeToggle } from "./theme-toggle";
 
 const navigation = [
-  { label: "Overview", icon: LayoutDashboard, active: true },
-  { label: "Revenue", icon: ReceiptIndianRupee, active: false },
-  { label: "Patients", icon: Users, active: false },
-  { label: "Reports", icon: BarChart3, active: false },
+  { label: "Overview", icon: LayoutDashboard, href: "/" as const },
+  { label: "Revenue", icon: ReceiptIndianRupee },
+  { label: "Patients", icon: Users },
+  { label: "Reports", icon: BarChart3 },
 ];
 
 interface AppShellProps {
@@ -37,6 +38,7 @@ interface AppShellProps {
 
 export function AppShell({ children, user }: AppShellProps) {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const initials = user.name
     .split(/\s+/)
     .map((part) => part[0])
@@ -82,32 +84,59 @@ export function AppShell({ children, user }: AppShellProps) {
           <p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]">
             Workspace
           </p>
-          {navigation.map(({ active, icon: Icon, label }) => (
-            <button
-              className={cn(
-                "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
-                active
-                  ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
-                  : "text-[var(--muted-strong)] hover:bg-[var(--hover)] hover:text-[var(--foreground)]",
-              )}
-              key={label}
-              type="button"
-            >
-              <Icon aria-hidden="true" size={18} />
-              {label}
-              {active ? <span className="ml-auto size-1.5 rounded-full bg-emerald-500" /> : null}
-            </button>
-          ))}
+          {navigation.map(({ href, icon: Icon, label }) => {
+            const active = href ? pathname === href : false;
+            const className = cn(
+              "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+              active
+                ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
+                : "text-[var(--muted-strong)] hover:bg-[var(--hover)] hover:text-[var(--foreground)]",
+              !href && "cursor-not-allowed opacity-55",
+            );
+            return href ? (
+              <Link
+                className={className}
+                key={label}
+                onClick={() => setMobileNavigationOpen(false)}
+                to={href}
+              >
+                <Icon aria-hidden="true" size={18} />
+                {label}
+                {active ? <span className="ml-auto size-1.5 rounded-full bg-emerald-500" /> : null}
+              </Link>
+            ) : (
+              <button
+                className={className}
+                disabled
+                key={label}
+                title={`${label} module is coming next`}
+                type="button"
+              >
+                <Icon aria-hidden="true" size={18} />
+                {label}
+              </button>
+            );
+          })}
         </nav>
 
         <div className="mt-8 space-y-1">
           <p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]">
             Manage
           </p>
-          <button className="sidebar-link" type="button">
-            <ShieldCheck size={18} />
-            Administration
-          </button>
+          {roleLabel === "admin" ? (
+            <Link
+              className={cn(
+                "sidebar-link",
+                pathname === "/administration" &&
+                  "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+              )}
+              onClick={() => setMobileNavigationOpen(false)}
+              to="/administration"
+            >
+              <ShieldCheck size={18} />
+              Administration
+            </Link>
+          ) : null}
           <button className="sidebar-link" type="button">
             <Settings size={18} />
             Settings

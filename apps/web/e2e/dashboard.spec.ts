@@ -56,6 +56,18 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await expect((await pdfDownload).suggestedFilename()).toMatch(/\.pdf$/);
 });
 
+test("administrators can open role and department access management", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("link", { name: "Administration" }).click();
+  await expect(page).toHaveURL("/administration");
+  await expect(page.getByRole("heading", { name: "Access control" })).toBeVisible();
+  await expect(page.getByText("admin@eyeflow.local", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Collection User user@eyeflow\.local/ }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Role")).toBeVisible();
+});
+
 test("adds collections for multiple departments in one save", async ({ page }) => {
   const patientName = `E2E Test Admin Patient ${Date.now()}`;
   const updatedPatientName = `${patientName} Updated`;
