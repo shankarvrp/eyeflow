@@ -1,7 +1,8 @@
 import { createDatabase } from "@eyeflow/db";
-import { auditEvents, dailyClosures } from "@eyeflow/db/schema";
+import { auditEvents, collectionSignoffs, dailyClosures } from "@eyeflow/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { readDashboardData } from "../revenue/revenue.server";
+import type { SignOffCollection } from "./closure-schema";
 
 let database: ReturnType<typeof createDatabase> | undefined;
 
@@ -40,6 +41,21 @@ export async function closeBusinessDay(businessDate: string, reason: string, act
     patientPage: 1,
     to: businessDate,
   });
+  const completedSignoffs = dashboard.signoffs?.periods ?? [];
+  const capturedTotal = completedSignoffs.reduce(
+    (total, signoff) => total + signoff.calculatedNet,
+    0,
+  );
+  if (
+    completedSignoffs.length !== 2 ||
+    Math.abs(dashboard.signoffs?.variance ?? Number.POSITIVE_INFINITY) >= 0.01 ||
+    Math.abs(capturedTotal - dashboard.summary.revenue) >= 0.01
+  ) {
+    throw new Response(
+      "Complete both collection sign-offs and match their declared and captured totals to the day before closing.",
+      { status: 409 },
+    );
+  }
 
   await db.transaction(async (transaction) => {
     await transaction
@@ -86,6 +102,82 @@ export async function closeBusinessDay(businessDate: string, reason: string, act
     pageSize: 10,
     patientPage: 1,
     to: businessDate,
+  });
+}
+
+export async function signOffCollectionPeriod(input: SignOffCollection, actorUserId: string) {
+  const db = getDatabase();
+  await assertCollectionDatesOpen([input.businessDate]);
+  const dashboard = await readDashboardData(null, true, {
+    collectionPage: 1,
+    from: input.businessDate,
+    pageSize: 10,
+    patientPage: 1,
+    to: input.businessDate,
+  });
+  const midday = dashboard.signoffs?.periods.find((period) => period.period === "midday");
+  if (input.period === "endofday" && !midday) {
+    throw new Response("Complete the mid-day sign-off before the later sign-off.", { status: 409 });
+  }
+  const calculatedNet =
+    input.period === "midday"
+      ? dashboard.summary.revenue
+      : dashboard.summary.revenue - (midday?.calculatedNet ?? 0);
+  const [before] = await db
+    .select()
+    .from(collectionSignoffs)
+    .where(
+      and(
+        eq(collectionSignoffs.businessDate, input.businessDate),
+        eq(collectionSignoffs.period, input.period),
+      ),
+    )
+    .limit(1);
+
+  await db.transaction(async (transaction) => {
+    await transaction
+      .insert(collectionSignoffs)
+      .values({
+        businessDate: input.businessDate,
+        calculatedNet: calculatedNet.toFixed(2),
+        declaredCash: input.declaredCash.toFixed(2),
+        declaredCredit: input.declaredCredit.toFixed(2),
+        declaredDiscount: input.declaredDiscount.toFixed(2),
+        declaredOnline: input.declaredOnline.toFixed(2),
+        note: input.note,
+        period: input.period,
+        signedByUserId: actorUserId,
+      })
+      .onConflictDoUpdate({
+        target: [collectionSignoffs.businessDate, collectionSignoffs.period],
+        set: {
+          calculatedNet: calculatedNet.toFixed(2),
+          declaredCash: input.declaredCash.toFixed(2),
+          declaredCredit: input.declaredCredit.toFixed(2),
+          declaredDiscount: input.declaredDiscount.toFixed(2),
+          declaredOnline: input.declaredOnline.toFixed(2),
+          note: input.note,
+          signedAt: new Date(),
+          signedByUserId: actorUserId,
+          updatedAt: new Date(),
+        },
+      });
+    await transaction.insert(auditEvents).values({
+      action: `revenue.collection.${input.period}.signed-off`,
+      actorUserId,
+      after: { ...input, calculatedNet },
+      before: before ?? {},
+      entityId: `${input.businessDate}:${input.period}`,
+      entityType: "collection-signoff",
+      reason: input.note,
+    });
+  });
+  return readDashboardData(null, true, {
+    collectionPage: 1,
+    from: input.businessDate,
+    pageSize: 10,
+    patientPage: 1,
+    to: input.businessDate,
   });
 }
 

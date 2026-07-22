@@ -226,6 +226,32 @@ export const dailyClosures = pgTable(
   (table) => [uniqueIndex("daily_closures_business_date_uidx").on(table.businessDate)],
 );
 
+export const collectionSignoffs = pgTable(
+  "collection_signoffs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    businessDate: date("business_date").notNull(),
+    period: text("period").notNull(),
+    declaredCash: numeric("declared_cash", { precision: 12, scale: 2 }).notNull(),
+    declaredOnline: numeric("declared_online", { precision: 12, scale: 2 }).notNull(),
+    declaredCredit: numeric("declared_credit", { precision: 12, scale: 2 }).notNull(),
+    declaredDiscount: numeric("declared_discount", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    calculatedNet: numeric("calculated_net", { precision: 12, scale: 2 }).notNull(),
+    note: text("note").notNull(),
+    signedByUserId: text("signed_by_user_id")
+      .notNull()
+      .references(() => user.id),
+    signedAt: timestamp("signed_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("collection_signoffs_date_period_uidx").on(table.businessDate, table.period),
+    index("collection_signoffs_date_idx").on(table.businessDate),
+  ],
+);
+
 export const revenueTargets = pgTable("revenue_targets", {
   id: text("id").primaryKey().default("clinic"),
   dailyAmount: numeric("daily_amount", { precision: 12, scale: 2 }).notNull().default("200000"),

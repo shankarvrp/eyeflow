@@ -1,6 +1,7 @@
 import { createDatabase } from "@eyeflow/db";
 import {
   auditEvents,
+  collectionSignoffs,
   customers,
   dailyClosures,
   departments,
@@ -251,6 +252,23 @@ export async function readDashboardData(
     .from(revenueTargets)
     .where(eq(revenueTargets.id, "clinic"))
     .limit(1);
+  const signoffRows =
+    isAdmin && query.from === query.to
+      ? await db
+          .select({
+            calculatedNet: collectionSignoffs.calculatedNet,
+            declaredCash: collectionSignoffs.declaredCash,
+            declaredCredit: collectionSignoffs.declaredCredit,
+            declaredDiscount: collectionSignoffs.declaredDiscount,
+            declaredOnline: collectionSignoffs.declaredOnline,
+            note: collectionSignoffs.note,
+            period: collectionSignoffs.period,
+            signedAt: collectionSignoffs.signedAt,
+          })
+          .from(collectionSignoffs)
+          .where(eq(collectionSignoffs.businessDate, query.from))
+          .orderBy(collectionSignoffs.signedAt)
+      : [];
 
   const departmentQuery = db.select({ name: departments.name }).from(departments);
   const departmentRows =
@@ -322,6 +340,7 @@ export async function readDashboardData(
   const toRecentCollection = (payment: (typeof allRows)[number]): RecentCollection => ({
     amount: Number(payment.amount) - Number(payment.discount),
     canEdit: payment.source === "eyeflow" && (isAdmin || dateKey(payment.occurredAt) === todayKey),
+    customerId: payment.customerId,
     department: payment.department as RecentCollection["department"],
     discount: Number(payment.discount),
     id: payment.id,
@@ -341,7 +360,7 @@ export async function readDashboardData(
     .map(toRecentCollection);
 
   const patientGroups = new Map<string, PatientCollectionSummary>();
-  for (const payment of persistedRows) {
+  for (const payment of allRows) {
     let group = patientGroups.get(payment.customerId);
     if (!group) {
       group = {
@@ -394,6 +413,11 @@ export async function readDashboardData(
           reconciliation: buildReconciliation(reconciliationRows, persistedRows),
         }
       : {}),
+    ...(isAdmin && query.from === query.to
+      ? {
+          signoffs: buildSignoffSummary(signoffRows, totals.revenue),
+        }
+      : {}),
     summary: {
       ...totals,
       patients: patientIds.size,
@@ -420,6 +444,49 @@ export async function readDashboardData(
           }
         : {}),
     },
+  };
+}
+
+function buildSignoffSummary(
+  rows: Array<{
+    calculatedNet: string;
+    declaredCash: string;
+    declaredCredit: string;
+    declaredDiscount: string;
+    declaredOnline: string;
+    note: string;
+    period: string;
+    signedAt: Date;
+  }>,
+  overallTotal: number,
+): NonNullable<DashboardData["signoffs"]> {
+  const periods: NonNullable<DashboardData["signoffs"]>["periods"] = rows.flatMap((row) => {
+    const period = row.period;
+    if (period !== "midday" && period !== "endofday") return [];
+    const declaredCash = Number(row.declaredCash);
+    const declaredCredit = Number(row.declaredCredit);
+    const declaredDiscount = Number(row.declaredDiscount);
+    const declaredOnline = Number(row.declaredOnline);
+    return [
+      {
+        calculatedNet: Number(row.calculatedNet),
+        declaredCash,
+        declaredCredit,
+        declaredDiscount,
+        declaredNet: declaredCash + declaredCredit + declaredOnline - declaredDiscount,
+        declaredOnline,
+        note: row.note,
+        period,
+        signedAt: row.signedAt.toISOString(),
+      },
+    ];
+  });
+  const declaredTotal = periods.reduce((total, period) => total + period.declaredNet, 0);
+  return {
+    declaredTotal,
+    overallTotal,
+    periods,
+    variance: declaredTotal - overallTotal,
   };
 }
 

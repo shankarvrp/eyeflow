@@ -41,6 +41,7 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await expect(page.getByText("Collection revenue")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add collection" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sync EMR" })).toBeVisible();
+  await expect(page.getByLabel("Enable automatic EMR sync")).not.toBeChecked();
   await expect(page.getByText("Daily target")).toBeVisible();
   await expect(page.getByText("Weekly target")).toBeVisible();
   await expect(page.getByText("Monthly target")).toBeVisible();
@@ -88,6 +89,9 @@ test("adds collections for multiple departments in one save", async ({ page }) =
   await page.getByRole("button", { name: "Save 3 payments" }).click();
 
   await expect(page.getByText(patientName, { exact: true })).toHaveCount(3);
+  await page.getByRole("button", { name: `Edit ${patientName} Investigation Online` }).click();
+  await expect(page.getByRole("heading", { name: "Patient collection workspace" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.reload();
   await expect(page.getByText(patientName, { exact: true })).toHaveCount(3);
   await expect(page.getByRole("button", { name: "Add collection" })).toBeEnabled();
@@ -132,8 +136,9 @@ test("normal users see only daily targets and can edit today's collections", asy
   await page.getByRole("spinbutton", { name: "Pharmacy payment 1 amount" }).fill("900");
   await page.getByRole("button", { name: "Save 1 payment" }).click();
   await page.getByRole("button", { name: `Edit ${patientName} Pharmacy Cash` }).click();
-  await page.getByRole("spinbutton", { name: "Gross amount" }).fill("1000");
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("spinbutton", { name: /^Patient amount/ }).fill("1000");
+  await page.getByLabel("Reason for changes").fill("Corrected same-day collection");
+  await page.getByRole("button", { name: "Save patient changes" }).click();
   const collectionRow = page.getByRole("row").filter({ hasText: patientName });
   await expect(collectionRow.getByText("₹1,000")).toBeVisible();
 

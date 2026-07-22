@@ -26,9 +26,11 @@ import {
   UnlockKeyhole,
   Users,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../components/app-shell";
-import { closeDay, reopenDay } from "../features/closure/closure.functions";
+import { closeDay, reopenDay, signOffCollection } from "../features/closure/closure.functions";
+import type { SignOffCollection } from "../features/closure/closure-schema";
+import { CollectionSignoffPanel } from "../features/closure/collection-signoff-panel";
 import {
   formatCurrency,
   type PatientCollectionSummary,
@@ -45,17 +47,14 @@ import {
 import { AddCollectionDialog } from "../features/revenue/add-collection-dialog";
 import { type DashboardQuery, shiftDateKey } from "../features/revenue/collection-query";
 import type {
-  EditCollection,
   NewCollectionBatch,
   PatientWorkspaceUpdate,
 } from "../features/revenue/collection-schema";
-import { EditCollectionDialog } from "../features/revenue/edit-collection-dialog";
 import { PatientWorkspaceDialog } from "../features/revenue/patient-workspace-dialog";
 import {
   createCollectionBatch,
   getDashboardData,
   initialDashboardQuery,
-  updateCollection,
   updatePatientWorkspace,
 } from "../features/revenue/revenue.functions";
 
@@ -74,10 +73,12 @@ function Dashboard() {
   const loaderData = Route.useLoaderData();
   const [addCollectionOpen, setAddCollectionOpen] = useState(false);
   const [collectionTab, setCollectionTab] = useState<"patients" | "recent">("recent");
-  const [editCollectionOpen, setEditCollectionOpen] = useState(false);
   const [patientWorkspaceOpen, setPatientWorkspaceOpen] = useState(false);
-  const [selectedCollection, setSelectedCollection] = useState<RecentCollection | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<PatientCollectionSummary | null>(null);
+  const [prefillEmrPatient, setPrefillEmrPatient] = useState<{
+    displayName: string;
+    id: string;
+  } | null>(null);
   const [ready, setReady] = useState(false);
   const [summary, setSummary] = useState(loaderData.dashboard.summary);
   const [departments, setDepartments] = useState(loaderData.dashboard.departments);
@@ -89,6 +90,7 @@ function Dashboard() {
   const [targets, setTargets] = useState(loaderData.dashboard.targets);
   const [reconciliation, setReconciliation] = useState(loaderData.dashboard.reconciliation);
   const [closure, setClosure] = useState(loaderData.dashboard.closure);
+  const [signoffs, setSignoffs] = useState(loaderData.dashboard.signoffs);
   const [closureReason, setClosureReason] = useState("");
   const [closureOperation, setClosureOperation] = useState(false);
   const [closureError, setClosureError] = useState<string>();
@@ -100,6 +102,8 @@ function Dashboard() {
   const [liveStatus, setLiveStatus] = useState<"connected" | "reconnecting">("reconnecting");
   const [rangeError, setRangeError] = useState<string>();
   const [emrStatus, setEmrStatus] = useState(loaderData.emrStatus);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
+  const [autoSyncReady, setAutoSyncReady] = useState(false);
   const [emrOperation, setEmrOperation] = useState<"connecting" | "idle" | "syncing">("idle");
   const [emrMessage, setEmrMessage] = useState<string>();
   const initialEmrSyncStarted = useRef(false);
@@ -120,6 +124,10 @@ function Dashboard() {
       : patientCollections.length === 0
         ? 0
         : (query.patientPage - 1) * query.pageSize + patientCollections.length;
+  const allowedDepartmentNames = useMemo(
+    () => departments.map((department) => department.name),
+    [departments],
+  );
 
   const applyDashboard = useCallback((updatedDashboard: typeof loaderData.dashboard) => {
     setCollections(updatedDashboard.recentCollections);
@@ -129,6 +137,7 @@ function Dashboard() {
     setTargets(updatedDashboard.targets);
     setReconciliation(updatedDashboard.reconciliation);
     setClosure(updatedDashboard.closure);
+    setSignoffs(updatedDashboard.signoffs);
     setPagination(updatedDashboard.pagination);
   }, []);
   const loadEmrPatientOptions = useCallback(
@@ -180,22 +189,46 @@ function Dashboard() {
     }
   }, []);
 
-  useEffect(() => setReady(true), []);
+  useEffect(() => {
+    setReady(true);
+    setAutoSyncEnabled(window.localStorage.getItem("eyeflow.emr-auto-sync") === "enabled");
+    setAutoSyncReady(true);
+  }, []);
 
   useEffect(() => {
-    if (!ready || !emrStatus.connected || initialEmrSyncStarted.current) return;
+    if (
+      !ready ||
+      !autoSyncReady ||
+      !autoSyncEnabled ||
+      !emrStatus.connected ||
+      initialEmrSyncStarted.current
+    )
+      return;
     initialEmrSyncStarted.current = true;
     void synchronizeEmr(initialDashboardQuery.to, true);
-  }, [emrStatus.connected, ready, synchronizeEmr]);
+  }, [autoSyncEnabled, autoSyncReady, emrStatus.connected, ready, synchronizeEmr]);
 
   useEffect(() => {
-    if (!ready || !emrStatus.connected) return;
+    if (!ready || !autoSyncReady || !autoSyncEnabled || !emrStatus.connected) return;
     const timer = window.setInterval(
       () => void synchronizeEmr(initialDashboardQuery.to, true),
       emrStatus.autoSyncIntervalMinutes * 60_000,
     );
     return () => window.clearInterval(timer);
-  }, [emrStatus.autoSyncIntervalMinutes, emrStatus.connected, ready, synchronizeEmr]);
+  }, [
+    autoSyncEnabled,
+    autoSyncReady,
+    emrStatus.autoSyncIntervalMinutes,
+    emrStatus.connected,
+    ready,
+    synchronizeEmr,
+  ]);
+
+  const changeAutoSync = (enabled: boolean) => {
+    setAutoSyncEnabled(enabled);
+    initialEmrSyncStarted.current = false;
+    window.localStorage.setItem("eyeflow.emr-auto-sync", enabled ? "enabled" : "disabled");
+  };
 
   useEffect(() => {
     if (!isAdmin || !liveEnabled) return;
@@ -236,14 +269,46 @@ function Dashboard() {
     await loadDashboard({ ...query, collectionPage: 1, patientPage: 1 });
   };
 
-  const saveCollection = async (collection: EditCollection) => {
-    await updateCollection({ data: collection });
-    await loadDashboard(query);
-  };
-
   const savePatientWorkspace = async (workspace: PatientWorkspaceUpdate) => {
     await updatePatientWorkspace({ data: workspace });
     await loadDashboard(query);
+  };
+
+  const openCollectionEditor = (collection: RecentCollection) => {
+    if (collection.source === "emr") {
+      setPrefillEmrPatient({
+        displayName: collection.patient,
+        id: collection.customerId.replace(/^emr:/, ""),
+      });
+      setAddCollectionOpen(true);
+      return;
+    }
+    const matchingCollections = collections.filter(
+      (candidate) => candidate.customerId === collection.customerId,
+    );
+    setSelectedPatient({
+      canEdit: matchingCollections.some((candidate) => candidate.canEdit),
+      collections: matchingCollections,
+      customerId: collection.customerId,
+      departments: [...new Set(matchingCollections.map((candidate) => candidate.department))],
+      lastCollectionAt: collection.occurredAt,
+      patient: collection.patient,
+      total: matchingCollections.reduce((total, candidate) => total + candidate.amount, 0),
+    });
+    setPatientWorkspaceOpen(true);
+  };
+
+  const openPatientEditor = (patient: PatientCollectionSummary) => {
+    if (patient.customerId.startsWith("emr:")) {
+      setPrefillEmrPatient({
+        displayName: patient.patient,
+        id: patient.customerId.replace(/^emr:/, ""),
+      });
+      setAddCollectionOpen(true);
+      return;
+    }
+    setSelectedPatient(patient);
+    setPatientWorkspaceOpen(true);
   };
 
   const changeClosure = async () => {
@@ -265,6 +330,11 @@ function Dashboard() {
     } finally {
       setClosureOperation(false);
     }
+  };
+
+  const saveSignoff = async (input: SignOffCollection) => {
+    const updatedDashboard = await signOffCollection({ data: input });
+    applyDashboard(updatedDashboard);
   };
 
   const moveOneDay = (days: number) => {
@@ -368,16 +438,27 @@ function Dashboard() {
                   : "An administrator must connect the EMR."}
             </span>
           </div>
-          <div className="text-xs text-[var(--muted)]">
-            {emrStatus.lastSyncedAt
-              ? `Last synced ${new Intl.DateTimeFormat("en-IN", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                }).format(new Date(emrStatus.lastSyncedAt))}`
-              : "Not synchronized yet"}
-            {emrStatus.connected
-              ? ` · Auto-sync every ${emrStatus.autoSyncIntervalMinutes} minutes while EyeFlow is open`
-              : ""}
+          <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-[var(--muted)]">
+            <span>
+              {emrStatus.lastSyncedAt
+                ? `Last synced ${new Intl.DateTimeFormat("en-IN", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  }).format(new Date(emrStatus.lastSyncedAt))}`
+                : "Not synchronized yet"}
+            </span>
+            {emrStatus.connected ? (
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2.5 py-1.5 font-semibold text-[var(--muted-strong)]">
+                <input
+                  aria-label="Enable automatic EMR sync"
+                  checked={autoSyncEnabled}
+                  className="size-4 accent-emerald-500"
+                  onChange={(event) => changeAutoSync(event.target.checked)}
+                  type="checkbox"
+                />
+                Auto-sync every {emrStatus.autoSyncIntervalMinutes} min
+              </label>
+            ) : null}
           </div>
           {emrMessage ? <p className="basis-full text-xs font-medium">{emrMessage}</p> : null}
         </output>
@@ -407,6 +488,15 @@ function Dashboard() {
                 <ReconciliationValue label="Manual net" value={reconciliation.manualNet} />
               </dl>
             </div>
+            {signoffs && query.from === query.to ? (
+              <CollectionSignoffPanel
+                businessDate={query.from}
+                disabled={closure?.status === "closed"}
+                onSignOff={saveSignoff}
+                signoffs={signoffs}
+                summary={summary}
+              />
+            ) : null}
             <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border)] pt-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="flex items-center gap-2 text-xs font-semibold">
@@ -435,7 +525,20 @@ function Dashboard() {
                     />
                   </label>
                   <Button
-                    disabled={closureOperation || closureReason.trim().length < 3}
+                    disabled={
+                      closureOperation ||
+                      closureReason.trim().length < 3 ||
+                      (closure?.status !== "closed" &&
+                        (!signoffs ||
+                          signoffs.periods.length !== 2 ||
+                          Math.abs(signoffs.variance) >= 0.01 ||
+                          Math.abs(
+                            signoffs.periods.reduce(
+                              (total, period) => total + period.calculatedNet,
+                              0,
+                            ) - summary.revenue,
+                          ) >= 0.01))
+                    }
                     onClick={() => void changeClosure()}
                     variant={closure?.status === "closed" ? "outline" : "default"}
                   >
@@ -825,17 +928,10 @@ function Dashboard() {
                         {formatCurrency(collection.amount)}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        {collection.source === "emr" ? (
-                          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                            Review in Add Collection
-                          </span>
-                        ) : collection.canEdit ? (
+                        {collection.source === "emr" || collection.canEdit ? (
                           <Button
                             aria-label={`Edit ${collection.patient} ${collection.department} ${collection.mode}`}
-                            onClick={() => {
-                              setSelectedCollection(collection);
-                              setEditCollectionOpen(true);
-                            }}
+                            onClick={() => openCollectionEditor(collection)}
                             size="sm"
                             variant="ghost"
                           >
@@ -909,15 +1005,18 @@ function Dashboard() {
                       <td className="px-6 py-4 text-right">
                         <Button
                           aria-label={`Open patient ${patient.patient}`}
-                          onClick={() => {
-                            setSelectedPatient(patient);
-                            setPatientWorkspaceOpen(true);
-                          }}
+                          onClick={() => openPatientEditor(patient)}
                           size="sm"
                           variant="ghost"
                         >
-                          {patient.canEdit ? <Pencil size={14} /> : <Users size={14} />}
-                          {patient.canEdit ? "View / edit" : "View"}
+                          {patient.canEdit || patient.customerId.startsWith("emr:") ? (
+                            <Pencil size={14} />
+                          ) : (
+                            <Users size={14} />
+                          )}
+                          {patient.canEdit || patient.customerId.startsWith("emr:")
+                            ? "View / edit"
+                            : "View"}
                         </Button>
                       </td>
                     </tr>
@@ -970,28 +1069,23 @@ function Dashboard() {
         </article>
       </section>
       <AddCollectionDialog
-        allowedDepartments={departments.map((department) => department.name)}
+        allowedDepartments={allowedDepartmentNames}
         canChooseDate={isAdmin}
         defaultOccurredOn={
           isAdmin && query.from === query.to ? query.from : initialDashboardQuery.from
         }
+        initialEmrPatient={prefillEmrPatient}
         loadPatientOptions={loadEmrPatientOptions}
         loadReceiptDrafts={loadEmrReceiptDrafts}
         onAdd={addCollection}
-        onOpenChange={setAddCollectionOpen}
+        onOpenChange={(open) => {
+          setAddCollectionOpen(open);
+          if (!open) setPrefillEmrPatient(null);
+        }}
         open={addCollectionOpen}
       />
-      <EditCollectionDialog
-        collection={selectedCollection}
-        onOpenChange={(open) => {
-          setEditCollectionOpen(open);
-          if (!open) setSelectedCollection(null);
-        }}
-        onSave={saveCollection}
-        open={editCollectionOpen}
-      />
       <PatientWorkspaceDialog
-        allowedDepartments={departments.map((department) => department.name)}
+        allowedDepartments={allowedDepartmentNames}
         canChooseDate={isAdmin}
         defaultOccurredOn={
           isAdmin && query.from === query.to ? query.from : initialDashboardQuery.from

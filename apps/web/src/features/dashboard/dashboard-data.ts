@@ -13,6 +13,7 @@ export interface RecentCollection {
   department: DepartmentName;
   discount: number;
   id: string;
+  customerId: string;
   mode: "Cash" | "Credit" | "Online";
   occurredAt: string;
   patient: string;
@@ -66,6 +67,22 @@ export interface DashboardData {
     reviewLines: number;
     sourceLines: number;
   };
+  signoffs?: {
+    declaredTotal: number;
+    overallTotal: number;
+    periods: Array<{
+      calculatedNet: number;
+      declaredCash: number;
+      declaredCredit: number;
+      declaredDiscount: number;
+      declaredNet: number;
+      declaredOnline: number;
+      note: string;
+      period: "endofday" | "midday";
+      signedAt: string;
+    }>;
+    variance: number;
+  };
   summary: DashboardSummary;
   targets: {
     daily: TargetProgress;
@@ -101,6 +118,7 @@ export const departmentSummaries: DepartmentSummary[] = [
 export const recentCollections: RecentCollection[] = [
   {
     canEdit: true,
+    customerId: "demo-anita",
     discount: 0,
     id: "1",
     patient: "Anita Rao",
@@ -114,6 +132,7 @@ export const recentCollections: RecentCollection[] = [
   },
   {
     canEdit: true,
+    customerId: "demo-mohan",
     discount: 0,
     id: "2",
     patient: "Mohan Kumar",
@@ -127,6 +146,7 @@ export const recentCollections: RecentCollection[] = [
   },
   {
     canEdit: true,
+    customerId: "demo-sana",
     discount: 0,
     id: "3",
     patient: "Sana Iqbal",
@@ -140,6 +160,7 @@ export const recentCollections: RecentCollection[] = [
   },
   {
     canEdit: true,
+    customerId: "demo-peter",
     discount: 0,
     id: "4",
     patient: "Peter James",

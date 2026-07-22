@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@eyeflow/ui";
 import { CalendarDays, Check, IndianRupee, Plus, ReceiptText, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EmrPatientOption, EmrReceiptDraft } from "../emr/emr.server";
 import {
   collectionBatchSchema,
@@ -26,6 +26,7 @@ interface AddCollectionDialogProps {
   defaultOccurredOn: string;
   loadPatientOptions: (appointmentDate: string) => Promise<EmrPatientOption[]>;
   loadReceiptDrafts: (appointmentDate: string, emrPatientId: string) => Promise<EmrReceiptDraft[]>;
+  initialEmrPatient?: { displayName: string; id: string } | null;
   onAdd: (collection: NewCollectionBatch) => Promise<void>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -42,20 +43,25 @@ export function AddCollectionDialog({
   defaultOccurredOn,
   loadPatientOptions,
   loadReceiptDrafts,
+  initialEmrPatient,
   onAdd,
   onOpenChange,
   open,
 }: AddCollectionDialogProps) {
   const nextKey = useRef(0);
-  const primaryDepartments = allowedDepartments.filter(
-    (department) => department === "OPD" || department === "Pharmacy",
+  const initialDepartments = useMemo(() => {
+    const primaryDepartments = allowedDepartments.filter(
+      (department) => department === "OPD" || department === "Pharmacy",
+    );
+    return primaryDepartments.length > 0 ? primaryDepartments : allowedDepartments.slice(0, 1);
+  }, [allowedDepartments]);
+  const createRows = useCallback(
+    () =>
+      initialDepartments.flatMap((department) => [
+        { ...emptyPaymentLine(department), key: `${department}-initial` },
+      ]),
+    [initialDepartments],
   );
-  const initialDepartments =
-    primaryDepartments.length > 0 ? primaryDepartments : allowedDepartments.slice(0, 1);
-  const createRows = () =>
-    initialDepartments.flatMap((department) => [
-      { ...emptyPaymentLine(department), key: `${department}-initial` },
-    ]);
   const [patient, setPatient] = useState("");
   const [emrPatientId, setEmrPatientId] = useState<string | null>(null);
   const [patientOptions, setPatientOptions] = useState<EmrPatientOption[]>([]);
@@ -74,6 +80,64 @@ export function AddCollectionDialog({
   useEffect(() => {
     if (open) setOccurredOn(defaultOccurredOn);
   }, [defaultOccurredOn, open]);
+
+  useEffect(() => {
+    if (!open || !initialEmrPatient) return;
+    let cancelled = false;
+    setPatient(initialEmrPatient.displayName);
+    setEmrPatientId(initialEmrPatient.id);
+    setReceiptDraftsLoading(true);
+    setSubmitError(undefined);
+    void loadReceiptDrafts(defaultOccurredOn, initialEmrPatient.id)
+      .then((drafts) => {
+        if (cancelled) return;
+        const mappedDrafts = drafts.filter(
+          (draft): draft is EmrReceiptDraft & { department: DepartmentName } =>
+            draft.department !== null && allowedDepartments.includes(draft.department),
+        );
+        const importedDepartments = new Set(mappedDrafts.map((draft) => draft.department));
+        const primaryBlankRows = createRows().filter(
+          (row) => !importedDepartments.has(row.department),
+        );
+        setRows([
+          ...primaryBlankRows,
+          ...mappedDrafts.map((draft) => ({
+            amount: draft.amount,
+            department: draft.department,
+            discount: 0,
+            emrReceiptId: draft.receiptId,
+            externalReceiptId: draft.externalReceiptId,
+            key: `receipt-${draft.receiptId}`,
+            mode: draft.mode,
+            providerOrMode: draft.providerOrMode,
+          })),
+        ]);
+        setReceiptImportSummary({
+          imported: mappedDrafts.length,
+          needsReview: drafts.length - mappedDrafts.length,
+        });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setSubmitError(
+            error instanceof Error ? error.message : "Unable to load this patient’s EMR receipts.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setReceiptDraftsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    allowedDepartments,
+    createRows,
+    defaultOccurredOn,
+    initialEmrPatient,
+    loadReceiptDrafts,
+    open,
+  ]);
 
   useEffect(() => {
     if (!open) return;
