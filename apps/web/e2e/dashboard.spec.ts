@@ -45,6 +45,18 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await expect(page.getByText("Daily target")).toBeVisible();
   await expect(page.getByText("Weekly target")).toBeVisible();
   await expect(page.getByText("Monthly target")).toBeVisible();
+  const middayBadge = page.getByRole("button", {
+    name: /Open Mid-day reconciliation:/,
+  });
+  const endOfDayBadge = page.getByRole("button", {
+    name: /Open End-of-day reconciliation:/,
+  });
+  await expect(middayBadge).toBeVisible();
+  await expect(endOfDayBadge).toBeVisible();
+  await middayBadge.click();
+  await expect(page.getByRole("heading", { name: "Mid-day collection handover" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Collection reconciliation" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Enable live" }).click();
   await expect(page.locator('button[aria-pressed="true"]')).toBeVisible();
 
