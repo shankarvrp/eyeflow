@@ -1,19 +1,11 @@
 import { Button, cn } from "@eyeflow/ui";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  ArrowDownRight,
   ArrowRight,
-  ArrowUpRight,
   Banknote,
-  Building2,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
-  CircleGauge,
   CreditCard,
-  FileSpreadsheet,
-  FileText,
-  IndianRupee,
   Link2,
   Pencil,
   Plus,
@@ -32,7 +24,6 @@ import {
   formatCurrency,
   type PatientCollectionSummary,
   type RecentCollection,
-  type TargetProgress,
 } from "../features/dashboard/dashboard-data";
 import {
   connectEmr,
@@ -84,7 +75,6 @@ function Dashboard() {
     loaderData.dashboard.patientCollections,
   );
   const [pagination, setPagination] = useState(loaderData.dashboard.pagination);
-  const [targets, setTargets] = useState(loaderData.dashboard.targets);
   const [reconciliation, setReconciliation] = useState(loaderData.dashboard.reconciliation);
   const [closure, setClosure] = useState(loaderData.dashboard.closure);
   const [signoffs, setSignoffs] = useState(loaderData.dashboard.signoffs);
@@ -136,7 +126,6 @@ function Dashboard() {
     setPatientCollections(updatedDashboard.patientCollections);
     setDepartments(updatedDashboard.departments);
     setSummary(updatedDashboard.summary);
-    setTargets(updatedDashboard.targets);
     setReconciliation(updatedDashboard.reconciliation);
     setClosure(updatedDashboard.closure);
     setSignoffs(updatedDashboard.signoffs);
@@ -269,11 +258,37 @@ function Dashboard() {
     return () => events.close();
   }, [applyDashboard, isAdmin, liveEnabled, query]);
 
+  const collectionShare = (amount: number) =>
+    summary.revenue === 0 ? 0 : Math.round((amount / summary.revenue) * 100);
   const headlineMetrics = [
-    { label: "Cash", amount: summary.cash, icon: Banknote, accent: "emerald" },
-    { label: "Online", amount: summary.online, icon: Smartphone, accent: "blue" },
-    { label: "Credit", amount: summary.credit, icon: CreditCard, accent: "amber" },
-    { label: "Discount", amount: summary.discount, icon: ReceiptText, accent: "rose" },
+    {
+      accent: "emerald",
+      amount: summary.cash,
+      detail: `${collectionShare(summary.cash)}% of collected`,
+      icon: Banknote,
+      label: "Cash",
+    },
+    {
+      accent: "blue",
+      amount: summary.online,
+      detail: `${collectionShare(summary.online)}% of collected`,
+      icon: Smartphone,
+      label: "Online",
+    },
+    {
+      accent: "amber",
+      amount: summary.credit,
+      detail: `${collectionShare(summary.credit)}% of collected`,
+      icon: CreditCard,
+      label: "Credit",
+    },
+    {
+      accent: "rose",
+      amount: summary.discount,
+      detail: "Recorded adjustments",
+      icon: ReceiptText,
+      label: "Discount",
+    },
   ] as const;
 
   const loadDashboard = async (nextQuery: DashboardQuery) => {
@@ -376,11 +391,6 @@ function Dashboard() {
     });
   };
 
-  const exportHref = (format: "pdf" | "xlsx") => {
-    const params = new URLSearchParams({ format, from: query.from, to: query.to });
-    return `/api/exports/collections?${params.toString()}`;
-  };
-
   return (
     <AppShell user={loaderData.session.user}>
       <section className="animate-in">
@@ -389,39 +399,6 @@ function Dashboard() {
             <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">{headingDate}</h1>
           </div>
           <div className="flex flex-wrap gap-2">
-            {isAdmin && !emrStatus.connected ? (
-              <Button
-                disabled={!ready || emrOperation !== "idle"}
-                onClick={() => void connectToEmr()}
-                variant="outline"
-              >
-                <Link2 size={16} />
-                {emrOperation === "connecting" ? "Waiting for EMR login…" : "Connect EMR"}
-              </Button>
-            ) : null}
-            <Button
-              disabled={!ready || !emrStatus.connected || emrOperation !== "idle"}
-              onClick={() => void synchronizeEmr(query.to)}
-              variant="outline"
-            >
-              <RefreshCw
-                className={emrOperation === "syncing" ? "animate-spin" : undefined}
-                size={16}
-              />
-              {emrOperation === "syncing" ? "Syncing EMR…" : "Sync EMR"}
-            </Button>
-            <Button asChild variant="outline">
-              <a download href={exportHref("xlsx")}>
-                <FileSpreadsheet size={16} />
-                Excel
-              </a>
-            </Button>
-            <Button asChild variant="outline">
-              <a download href={exportHref("pdf")}>
-                <FileText size={16} />
-                PDF
-              </a>
-            </Button>
             <Button disabled={!ready} onClick={() => setAddCollectionOpen(true)}>
               <Plus size={17} />
               Add collection
@@ -429,15 +406,16 @@ function Dashboard() {
           </div>
         </div>
 
-        <output
+        <section
+          aria-label="EMR synchronization"
           className={cn(
-            "mb-5 flex flex-col gap-2 rounded-2xl border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between",
+            "mb-5 grid gap-3 rounded-2xl border px-4 py-3 text-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center",
             emrStatus.connected
               ? "border-emerald-500/20 bg-emerald-500/[0.06]"
               : "border-amber-500/25 bg-amber-500/[0.08]",
           )}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span
               className={cn(
                 "size-2 rounded-full",
@@ -455,8 +433,8 @@ function Dashboard() {
                   : "An administrator must connect the EMR."}
             </span>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-[var(--muted)]">
-            <span>
+          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+            <span className="mr-1 text-xs text-[var(--muted)]">
               {emrStatus.lastSyncedAt
                 ? `Last synced ${new Intl.DateTimeFormat("en-IN", {
                     dateStyle: "medium",
@@ -464,8 +442,31 @@ function Dashboard() {
                   }).format(new Date(emrStatus.lastSyncedAt))}`
                 : "Not synchronized yet"}
             </span>
+            {isAdmin && !emrStatus.connected ? (
+              <Button
+                disabled={!ready || emrOperation !== "idle"}
+                onClick={() => void connectToEmr()}
+                size="sm"
+                variant="outline"
+              >
+                <Link2 size={15} />
+                {emrOperation === "connecting" ? "Waiting for login…" : "Connect EMR"}
+              </Button>
+            ) : null}
+            <Button
+              disabled={!ready || !emrStatus.connected || emrOperation !== "idle"}
+              onClick={() => void synchronizeEmr(query.to)}
+              size="sm"
+              variant="outline"
+            >
+              <RefreshCw
+                className={emrOperation === "syncing" ? "animate-spin" : undefined}
+                size={15}
+              />
+              {emrOperation === "syncing" ? "Syncing…" : "Sync EMR"}
+            </Button>
             {emrStatus.connected ? (
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2.5 py-1.5 font-semibold text-[var(--muted-strong)]">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2.5 py-2 text-xs font-semibold text-[var(--muted-strong)]">
                 <input
                   aria-label="Enable automatic EMR sync"
                   checked={autoSyncEnabled}
@@ -477,8 +478,8 @@ function Dashboard() {
               </label>
             ) : null}
           </div>
-          {emrMessage ? <p className="basis-full text-xs font-medium">{emrMessage}</p> : null}
-        </output>
+          {emrMessage ? <p className="text-xs font-medium xl:col-span-2">{emrMessage}</p> : null}
+        </section>
 
         {reconciliation && signoffs && query.from === query.to ? (
           <CollectionSignoffPanel
@@ -499,8 +500,8 @@ function Dashboard() {
           />
         ) : null}
 
-        <div className="panel mb-5 flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="flex flex-wrap items-end gap-2">
+        <div className="panel mb-5 grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
             <Button
               aria-label="Previous day"
               disabled={loadingRange || (!isAdmin && query.from <= `${query.to.slice(0, 7)}-01`)}
@@ -510,10 +511,10 @@ function Dashboard() {
             >
               <ChevronLeft size={16} />
             </Button>
-            <label>
+            <label className="min-w-0">
               <span className="form-label">From</span>
               <input
-                className="form-control w-40"
+                className="form-control w-full"
                 max={initialDashboardQuery.to}
                 min={isAdmin ? undefined : `${initialDashboardQuery.to.slice(0, 7)}-01`}
                 onChange={(event) => setDraftFrom(event.target.value)}
@@ -521,10 +522,10 @@ function Dashboard() {
                 value={draftFrom}
               />
             </label>
-            <label>
+            <label className="min-w-0">
               <span className="form-label">To</span>
               <input
-                className="form-control w-40"
+                className="form-control w-full"
                 max={initialDashboardQuery.to}
                 min={isAdmin ? undefined : `${initialDashboardQuery.to.slice(0, 7)}-01`}
                 onChange={(event) => setDraftTo(event.target.value)}
@@ -533,7 +534,18 @@ function Dashboard() {
               />
             </label>
             <Button
-              disabled={loadingRange}
+              aria-label="Next day"
+              disabled={loadingRange || query.to >= initialDashboardQuery.to}
+              onClick={() => moveOneDay(1)}
+              size="sm"
+              variant="outline"
+            >
+              <ChevronRight size={16} />
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <Button
+              disabled={loadingRange || draftFrom > draftTo}
               onClick={() =>
                 void loadDashboard({
                   ...query,
@@ -555,36 +567,26 @@ function Dashboard() {
             >
               Today
             </Button>
-            <Button
-              aria-label="Next day"
-              disabled={loadingRange || query.to >= initialDashboardQuery.to}
-              onClick={() => moveOneDay(1)}
-              size="sm"
-              variant="outline"
-            >
-              <ChevronRight size={16} />
-            </Button>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-[var(--muted-strong)]">
-            <CalendarDays size={17} />
-            <span>{query.from === query.to ? query.from : `${query.from} to ${query.to}`}</span>
-            <select
-              aria-label="Rows per page"
-              className="form-control w-24"
-              onChange={(event) =>
-                void loadDashboard({
-                  ...query,
-                  collectionPage: 1,
-                  pageSize: Number(event.target.value),
-                  patientPage: 1,
-                })
-              }
-              value={query.pageSize}
-            >
-              <option value="10">10 rows</option>
-              <option value="25">25 rows</option>
-              <option value="50">50 rows</option>
-            </select>
+            <label>
+              <span className="form-label">Table size</span>
+              <select
+                aria-label="Rows per page"
+                className="form-control w-24"
+                onChange={(event) =>
+                  void loadDashboard({
+                    ...query,
+                    collectionPage: 1,
+                    pageSize: Number(event.target.value),
+                    patientPage: 1,
+                  })
+                }
+                value={query.pageSize}
+              >
+                <option value="10">10 rows</option>
+                <option value="25">25 rows</option>
+                <option value="50">50 rows</option>
+              </select>
+            </label>
           </div>
         </div>
         {rangeError ? (
@@ -602,7 +604,7 @@ function Dashboard() {
             <div className="relative">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-slate-300">
-                  {query.from === query.to ? "Collection revenue" : "Range revenue"}
+                  {query.from === query.to ? "Today's collection pulse" : "Collection pulse"}
                 </p>
                 {isAdmin ? (
                   <button
@@ -634,26 +636,19 @@ function Dashboard() {
               <p className="mt-5 text-4xl font-bold tracking-[-0.04em] sm:text-5xl">
                 {formatCurrency(summary.revenue)}
               </p>
-              <div className="mt-4 flex items-center gap-2 text-sm">
-                <span className="flex items-center gap-1 rounded-lg bg-emerald-400/15 px-2 py-1 font-semibold text-emerald-300">
-                  <ArrowUpRight size={14} />
-                  12.8%
-                </span>
-                <span className="text-slate-400">vs. yesterday</span>
-              </div>
-              <div className="mt-9 grid grid-cols-2 gap-4 border-t border-white/10 pt-5">
+              <div className="mt-9 grid grid-cols-3 gap-4 border-t border-white/10 pt-5">
                 <div>
-                  <p className="text-xs text-slate-400">Transactions</p>
+                  <p className="text-xs text-slate-400">Patients</p>
+                  <p className="mt-1 text-lg font-semibold">{summary.patients}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Payments</p>
                   <p className="mt-1 text-lg font-semibold">{summary.transactions}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400">Avg. collection</p>
+                  <p className="text-xs text-slate-400">Active departments</p>
                   <p className="mt-1 text-lg font-semibold">
-                    {formatCurrency(
-                      summary.transactions === 0
-                        ? 0
-                        : Math.round(summary.revenue / summary.transactions),
-                    )}
+                    {departments.filter((department) => department.amount > 0).length}
                   </p>
                 </div>
               </div>
@@ -661,7 +656,7 @@ function Dashboard() {
           </article>
 
           <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
-            {headlineMetrics.map(({ accent, amount, icon: Icon, label }) => (
+            {headlineMetrics.map(({ accent, amount, detail, icon: Icon, label }) => (
               <article className="metric-card" key={label}>
                 <div className={cn("metric-icon", `metric-icon-${accent}`)}>
                   <Icon size={19} />
@@ -670,30 +665,33 @@ function Dashboard() {
                 <p className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">
                   {formatCurrency(amount)}
                 </p>
-                <p className="mt-3 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                  <ArrowUpRight size={13} />
-                  8.2% today
-                </p>
+                <p className="mt-3 text-xs text-[var(--muted)]">{detail}</p>
               </article>
             ))}
           </div>
         </div>
 
-        <div className="mb-5 grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+        <div className="mb-5">
           <article className="panel p-5 sm:p-6">
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h2 className="panel-title">Department performance</h2>
                 <p className="panel-subtitle">Collection split across all departments</p>
               </div>
-              <Button size="sm" variant="ghost">
-                View report
-                <ArrowRight size={15} />
+              <Button asChild size="sm" variant="ghost">
+                <Link to="/reports">
+                  View report
+                  <ArrowRight size={15} />
+                </Link>
               </Button>
             </div>
             <div className="space-y-5">
               {departments.map((department) => {
-                const width = `${Math.max(20, Math.round((department.amount / 50_000) * 100))}%`;
+                const share =
+                  summary.revenue === 0
+                    ? 0
+                    : Math.round((department.amount / summary.revenue) * 100);
+                const width = `${Math.min(100, Math.max(department.amount > 0 ? 4 : 0, share))}%`;
                 return (
                   <div key={department.name}>
                     <div className="mb-2 flex items-center justify-between gap-4">
@@ -705,20 +703,8 @@ function Dashboard() {
                         <span className="text-sm font-bold">
                           {formatCurrency(department.amount)}
                         </span>
-                        <span
-                          className={cn(
-                            "flex min-w-14 items-center justify-end text-xs font-medium",
-                            department.change >= 0
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-rose-500",
-                          )}
-                        >
-                          {department.change >= 0 ? (
-                            <ArrowUpRight size={13} />
-                          ) : (
-                            <ArrowDownRight size={13} />
-                          )}
-                          {Math.abs(department.change)}%
+                        <span className="min-w-14 text-right text-xs font-medium text-[var(--muted)]">
+                          {share}% share
                         </span>
                       </div>
                     </div>
@@ -731,29 +717,6 @@ function Dashboard() {
                   </div>
                 );
               })}
-            </div>
-          </article>
-
-          <article className="panel p-5 sm:p-6">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <h2 className="panel-title">
-                  {query.from === query.to ? "Selected day at a glance" : "Period at a glance"}
-                </h2>
-                <p className="panel-subtitle">Operational pulse for the active filter</p>
-              </div>
-              <CalendarDays className="text-[var(--muted)]" size={20} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <QuickStat icon={Users} label="Patients" value={String(summary.patients)} />
-              <QuickStat icon={CircleGauge} label="Payments" value={String(summary.transactions)} />
-              <QuickStat icon={Building2} label="Departments" value="5" />
-              <QuickStat icon={IndianRupee} label="Pending" value="₹18.4K" />
-            </div>
-            <div className="mt-5 space-y-3">
-              <TargetCard target={targets.daily} />
-              {targets.weekly ? <TargetCard target={targets.weekly} /> : null}
-              {targets.monthly ? <TargetCard target={targets.monthly} /> : null}
             </div>
           </article>
         </div>
@@ -1027,49 +990,5 @@ function Dashboard() {
         workspace={selectedPatient}
       />
     </AppShell>
-  );
-}
-
-function TargetCard({ target }: { target: TargetProgress }) {
-  const percentage =
-    target.target === 0 ? 0 : Math.min(100, Math.round((target.actual / target.target) * 100));
-  return (
-    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.07] p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
-            {target.label} target
-          </p>
-          <p className="mt-1 text-xs text-emerald-700/70 dark:text-emerald-300/70">
-            {formatCurrency(target.actual)} of {formatCurrency(target.target)}
-          </p>
-        </div>
-        <span className="text-xl font-bold text-emerald-700 dark:text-emerald-300">
-          {percentage}%
-        </span>
-      </div>
-      <div className="mt-3 h-2 rounded-full bg-emerald-950/10">
-        <div
-          className="h-full rounded-full bg-emerald-500 transition-[width]"
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-interface QuickStatProps {
-  icon: typeof Users;
-  label: string;
-  value: string;
-}
-
-function QuickStat({ icon: Icon, label, value }: QuickStatProps) {
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--subtle-panel)] p-4">
-      <Icon className="mb-4 text-[var(--muted)]" size={18} />
-      <p className="text-xl font-bold">{value}</p>
-      <p className="mt-1 text-xs text-[var(--muted)]">{label}</p>
-    </div>
   );
 }

@@ -41,8 +41,9 @@ export interface PatientDirectoryEntry {
   visits: number;
 }
 
-export async function readPatientDirectory(): Promise<PatientDirectoryEntry[]> {
+export async function readPatientDirectory(query: ReportQuery): Promise<PatientDirectoryEntry[]> {
   const db = getDatabase();
+  const bounds = clinicDateBounds(query.from, query.to);
   const [patientRows, customerRows, appointmentRows, receiptRows, paymentRows] = await Promise.all([
     db
       .select({
@@ -56,7 +57,10 @@ export async function readPatientDirectory(): Promise<PatientDirectoryEntry[]> {
       .select({ emrPatientId: customers.emrPatientId, id: customers.id, name: customers.name })
       .from(customers)
       .orderBy(asc(customers.name)),
-    db.select({ emrPatientId: emrAppointments.emrPatientId }).from(emrAppointments),
+    db
+      .select({ emrPatientId: emrAppointments.emrPatientId })
+      .from(emrAppointments)
+      .where(inArray(emrAppointments.appointmentDate, dateKeys(query.from, query.to))),
     db
       .select({
         amount: emrReceipts.amount,
@@ -69,7 +73,14 @@ export async function readPatientDirectory(): Promise<PatientDirectoryEntry[]> {
       })
       .from(emrReceipts)
       .leftJoin(payments, eq(payments.emrReceiptId, emrReceipts.id))
-      .where(and(eq(emrReceipts.requiresReview, false), isNull(payments.id))),
+      .where(
+        and(
+          eq(emrReceipts.requiresReview, false),
+          isNull(payments.id),
+          gte(emrReceipts.occurredAt, bounds.start),
+          lt(emrReceipts.occurredAt, bounds.end),
+        ),
+      ),
     db
       .select({
         amount: payments.amount,
@@ -81,7 +92,8 @@ export async function readPatientDirectory(): Promise<PatientDirectoryEntry[]> {
         occurredAt: payments.occurredAt,
       })
       .from(payments)
-      .innerJoin(departments, eq(payments.departmentId, departments.id)),
+      .innerJoin(departments, eq(payments.departmentId, departments.id))
+      .where(and(gte(payments.occurredAt, bounds.start), lt(payments.occurredAt, bounds.end))),
   ]);
 
   const directory = new Map<string, PatientDirectoryEntry>();
@@ -141,7 +153,9 @@ export async function readPatientDirectory(): Promise<PatientDirectoryEntry[]> {
       occurredAt: payment.occurredAt,
     });
   }
-  return [...directory.values()].sort((left, right) => left.name.localeCompare(right.name));
+  return [...directory.values()]
+    .filter((entry) => entry.visits > 0 || entry.collections.length > 0)
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function addPatientCollection(
@@ -167,6 +181,12 @@ export interface ReportsData {
     transactions: number;
   }>;
   conversion: Array<{ converted: number; department: "Opticals" | "Pharmacy"; ratio: number }>;
+  departmentTargets: Array<{
+    daily: { actual: number; target: number };
+    department: string;
+    monthly: { actual: number; target: number };
+    weekly: { actual: number; target: number };
+  }>;
   filter: ReportQuery;
   patientTime: Array<{
     minutes: number;
@@ -174,21 +194,11 @@ export interface ReportsData {
     scheduledAt: string;
     completedAt: string;
   }>;
-  targetGaps?: Array<{
-    actualMonth: number;
-    actualWeek: number;
-    department: string;
-    monthlyGap: number;
-    monthlyTarget: number;
-    weeklyGap: number;
-    weeklyTarget: number;
-  }>;
 }
 
 export async function readReportsData(
   query: ReportQuery,
   accessibleDepartments: string[] | null,
-  isAdmin: boolean,
 ): Promise<ReportsData> {
   const db = getDatabase();
   const rows = await readCollectionExportRows(accessibleDepartments, {
@@ -275,9 +285,10 @@ export async function readReportsData(
     })
     .sort((left, right) => right.minutes - left.minutes);
 
-  const targetGaps = isAdmin
-    ? await buildTargetGaps(await readDepartmentTargets(), accessibleDepartments)
-    : undefined;
+  const departmentTargets = await buildDepartmentTargets(
+    await readDepartmentTargets(),
+    accessibleDepartments,
+  );
   return {
     collectionByDateDepartment: [...collectionGroups.values()].sort(
       (left, right) =>
@@ -293,13 +304,13 @@ export async function readReportsData(
               (convertedAppointmentPatients[department].size / appointmentPatients.size) * 10_000,
             ) / 100,
     })),
+    departmentTargets,
     filter: query,
     patientTime,
-    ...(targetGaps ? { targetGaps } : {}),
   };
 }
 
-async function buildTargetGaps(
+async function buildDepartmentTargets(
   targets: Awaited<ReturnType<typeof readDepartmentTargets>>,
   accessibleDepartments: string[] | null,
 ) {
@@ -317,22 +328,30 @@ async function buildTargetGaps(
     patientPage: 1,
     to: today,
   });
-  return targets.map((target) => {
-    const departmentRows = rows.filter((row) => row.department === target.department);
-    const actualMonth = departmentRows.reduce((total, row) => total + row.amount - row.discount, 0);
-    const actualWeek = departmentRows
-      .filter((row) => clinicDate(row.occurredAt) >= weekStartKey)
-      .reduce((total, row) => total + row.amount - row.discount, 0);
-    return {
-      actualMonth,
-      actualWeek,
-      department: target.department,
-      monthlyGap: Math.max(0, target.monthly - actualMonth),
-      monthlyTarget: target.monthly,
-      weeklyGap: Math.max(0, target.weekly - actualWeek),
-      weeklyTarget: target.weekly,
-    };
-  });
+  return targets
+    .filter(
+      (target) =>
+        accessibleDepartments === null || accessibleDepartments.includes(target.department),
+    )
+    .map((target) => {
+      const departmentRows = rows.filter((row) => row.department === target.department);
+      const actualMonth = departmentRows.reduce(
+        (total, row) => total + row.amount - row.discount,
+        0,
+      );
+      const actualWeek = departmentRows
+        .filter((row) => clinicDate(row.occurredAt) >= weekStartKey)
+        .reduce((total, row) => total + row.amount - row.discount, 0);
+      const actualDay = departmentRows
+        .filter((row) => clinicDate(row.occurredAt) === today)
+        .reduce((total, row) => total + row.amount - row.discount, 0);
+      return {
+        daily: { actual: actualDay, target: target.daily },
+        department: target.department,
+        monthly: { actual: actualMonth, target: target.monthly },
+        weekly: { actual: actualWeek, target: target.weekly },
+      };
+    });
 }
 
 function clinicDate(date: Date) {

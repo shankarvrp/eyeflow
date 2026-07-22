@@ -19,6 +19,16 @@ export const reportQuerySchema = z
 export type ReportQuery = z.infer<typeof reportQuerySchema>;
 
 export function currentMonthReportQuery(date = new Date()): ReportQuery {
+  const today = clinicDateKey(date);
+  return { from: `${today.slice(0, 7)}-01`, to: today };
+}
+
+export function currentDayReportQuery(date = new Date()): ReportQuery {
+  const today = clinicDateKey(date);
+  return { from: today, to: today };
+}
+
+function clinicDateKey(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     day: "2-digit",
     month: "2-digit",
@@ -27,6 +37,5 @@ export function currentMonthReportQuery(date = new Date()): ReportQuery {
   }).formatToParts(date);
   const value = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
-  const today = `${value("year")}-${value("month")}-${value("day")}`;
-  return { from: `${today.slice(0, 7)}-01`, to: today };
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }

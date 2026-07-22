@@ -5,17 +5,26 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../components/app-shell";
 import { formatCurrency } from "../features/dashboard/dashboard-data";
 import { getPatientDirectory } from "../features/operations/operations.functions";
+import { currentDayReportQuery } from "../features/operations/operations-schema";
+
+const initialQuery = currentDayReportQuery();
 
 export const Route = createFileRoute("/patients")({
   component: Patients,
-  loader: () => getPatientDirectory(),
+  loader: () => getPatientDirectory({ data: initialQuery }),
 });
 
 function Patients() {
-  const { patients, session } = Route.useLoaderData();
+  const loaderData = Route.useLoaderData();
+  const [patients, setPatients] = useState(loaderData.patients);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string>();
   const [page, setPage] = useState(1);
+  const [from, setFrom] = useState(initialQuery.from);
+  const [to, setTo] = useState(initialQuery.to);
+  const [loading, setLoading] = useState(false);
+  const [rangeError, setRangeError] = useState<string>();
+  const isAdmin = loaderData.session.user.role?.split(",").includes("admin") ?? false;
   const pageSize = 25;
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -28,30 +37,85 @@ function Patients() {
   }, [patients, search]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visiblePatients = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const loadRange = async (nextFrom: string, nextTo: string) => {
+    try {
+      setLoading(true);
+      setRangeError(undefined);
+      const result = await getPatientDirectory({ data: { from: nextFrom, to: nextTo } });
+      setPatients(result.patients);
+      setFrom(nextFrom);
+      setTo(nextTo);
+      setPage(1);
+      setExpanded(undefined);
+    } catch (error) {
+      setRangeError(error instanceof Error ? error.message : "Unable to load that date range.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <AppShell user={session.user}>
+    <AppShell user={loaderData.session.user}>
       <section className="animate-in space-y-5">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
               Patient directory
             </p>
             <h1 className="mt-2 text-3xl font-bold tracking-[-0.035em]">All patients</h1>
             <p className="mt-2 text-sm text-[var(--muted-strong)]">
-              An exhaustive EMR and EyeFlow view with expandable collection history.
+              Every EMR and EyeFlow patient active in the selected range, with expandable history.
             </p>
           </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3">
-            <p className="text-2xl font-bold">{patients.length}</p>
-            <p className="text-xs text-[var(--muted)]">Synchronized patients</p>
+          <div className="grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
+            <label className="min-w-0">
+              <span className="form-label">From</span>
+              <input
+                className="form-control w-full"
+                max={initialQuery.to}
+                min={isAdmin ? undefined : `${initialQuery.to.slice(0, 7)}-01`}
+                onChange={(event) => setFrom(event.target.value)}
+                type="date"
+                value={from}
+              />
+            </label>
+            <label className="min-w-0">
+              <span className="form-label">To</span>
+              <input
+                className="form-control w-full"
+                max={initialQuery.to}
+                min={isAdmin ? undefined : `${initialQuery.to.slice(0, 7)}-01`}
+                onChange={(event) => setTo(event.target.value)}
+                type="date"
+                value={to}
+              />
+            </label>
+            <Button disabled={loading || from > to} onClick={() => void loadRange(from, to)}>
+              {loading ? "Loading…" : "Apply"}
+            </Button>
+            <Button
+              disabled={loading}
+              onClick={() => void loadRange(initialQuery.from, initialQuery.to)}
+              variant="outline"
+            >
+              Today
+            </Button>
           </div>
         </header>
+
+        {rangeError ? (
+          <p
+            className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-300"
+            role="alert"
+          >
+            {rangeError}
+          </p>
+        ) : null}
 
         <article className="panel overflow-hidden">
           <div className="flex flex-col gap-3 border-b border-[var(--border)] p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 text-sm font-bold">
-              <Users size={17} /> Patient-wise expanded view
+              <Users size={17} /> Patient-wise expanded view · {patients.length} patients
             </div>
             <label className="relative w-full sm:w-80">
               <Search

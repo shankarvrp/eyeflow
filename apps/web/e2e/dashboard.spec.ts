@@ -39,13 +39,12 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await signIn(page);
   await expect(page.getByRole("heading", { name: /July 2026/ })).toBeVisible();
   await expect(page.getByText("Good morning, Dr. Shankar")).toHaveCount(0);
-  await expect(page.getByText("Collection revenue")).toBeVisible();
+  await expect(page.getByText("Today's collection pulse")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add collection" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sync EMR" })).toBeVisible();
   await expect(page.getByLabel("Enable automatic EMR sync")).not.toBeChecked();
-  await expect(page.getByText("Daily target")).toBeVisible();
-  await expect(page.getByText("Weekly target")).toBeVisible();
-  await expect(page.getByText("Monthly target")).toBeVisible();
+  await expect(page.getByText("Pending", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Daily target")).toHaveCount(0);
   const middayBadge = page.getByRole("button", {
     name: /Open Mid-day reconciliation:/,
   });
@@ -63,14 +62,6 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Enable live" }).click();
   await expect(page.locator('button[aria-pressed="true"]')).toBeVisible();
-
-  const excelDownload = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Excel" }).click();
-  await expect((await excelDownload).suggestedFilename()).toMatch(/\.xlsx$/);
-
-  const pdfDownload = page.waitForEvent("download");
-  await page.getByRole("link", { name: "PDF" }).click();
-  await expect((await pdfDownload).suggestedFilename()).toMatch(/\.pdf$/);
 });
 
 test("administrators can open role and department access management", async ({ page }) => {
@@ -98,11 +89,25 @@ test("revenue, patients, and reports modules are operational", async ({ page }) 
   await expect(page).toHaveURL("/patients");
   await expect(page.getByRole("heading", { name: "All patients" })).toBeVisible();
   await expect(page.getByText("Patient-wise expanded view")).toBeVisible();
+  const patientTo = await page.getByRole("textbox", { exact: true, name: "To" }).inputValue();
+  await expect(page.getByRole("textbox", { exact: true, name: "From" })).toHaveValue(patientTo);
   await page.getByRole("link", { name: "Reports" }).click();
   await expect(page).toHaveURL("/reports");
   await expect(page.getByRole("heading", { name: "Reports" })).toBeVisible();
   await expect(page.getByText("Department and date-wise collection")).toBeVisible();
   await expect(page.getByText("Patient time spent")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Clinic target pulse" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Department target meters" })).toBeVisible();
+  await page.getByText("This month", { exact: true }).click();
+  await expect(page.getByRole("radio", { name: "This month" })).toBeChecked();
+
+  const excelDownload = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Excel" }).click();
+  await expect((await excelDownload).suggestedFilename()).toMatch(/\.xlsx$/);
+
+  const pdfDownload = page.waitForEvent("download");
+  await page.getByRole("link", { name: "PDF" }).click();
+  await expect((await pdfDownload).suggestedFilename()).toMatch(/\.pdf$/);
 });
 
 test("adds collections for multiple departments in one save", async ({ page }) => {
@@ -153,18 +158,23 @@ test("adds collections for multiple departments in one save", async ({ page }) =
   await expect(updatedPatientRow.getByText("Opticals", { exact: true })).toBeVisible();
 });
 
-test("normal users see only daily targets and can edit today's collections", async ({ page }) => {
+test("normal users see department targets in reports and can edit today's collections", async ({
+  page,
+}) => {
   const patientName = `E2E Test User Patient ${Date.now()}`;
   await signIn(page, {
     email: "user@eyeflow.local",
     password: "EyeFlowUser123!",
   });
 
-  await expect(page.getByText("Daily target")).toBeVisible();
-  await expect(page.getByText("Weekly target")).toHaveCount(0);
-  await expect(page.getByText("Monthly target")).toHaveCount(0);
+  await expect(page.getByText("Daily target")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Enable live" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Open Mid-day reconciliation:/ })).toBeVisible();
+
+  await page.getByRole("link", { name: "Reports" }).click();
+  await expect(page.getByRole("heading", { name: "Department target meters" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Clinic target pulse" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Overview" }).click();
 
   await page.getByRole("button", { name: "Add collection" }).click();
   await page.getByLabel("Patient name").fill(patientName);
