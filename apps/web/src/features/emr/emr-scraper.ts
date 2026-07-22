@@ -6,6 +6,7 @@ export interface AppointmentListEntry {
   appointmentId: string;
   href: string;
   patientName: string;
+  scheduledTime: string;
   visitType: string | null;
 }
 
@@ -29,6 +30,7 @@ export function parseAppointmentListEntry(
     appointmentId,
     href,
     patientName,
+    scheduledTime: lines[0] ?? "",
     visitType: visitTypes.find((visitType) => lines.includes(visitType)) ?? null,
   };
 }

@@ -33,6 +33,7 @@ export interface EmrAppointmentImport {
   externalAppointmentId: string;
   externalPatientId: string;
   patientName: string;
+  scheduledAt: string | null;
   visitType: string | null;
 }
 
@@ -96,6 +97,7 @@ export async function importEmrAppointments(
           emrPatientId: patient.id,
           externalAppointmentId: record.externalAppointmentId,
           source: "foss",
+          scheduledAt: record.scheduledAt ? new Date(record.scheduledAt) : null,
           visitType: record.visitType,
         })
         .onConflictDoUpdate({
@@ -104,6 +106,7 @@ export async function importEmrAppointments(
             appointmentDate: record.appointmentDate,
             emrPatientId: patient.id,
             lastSyncedAt: new Date(),
+            scheduledAt: record.scheduledAt ? new Date(record.scheduledAt) : null,
             updatedAt: new Date(),
             visitType: record.visitType,
           },

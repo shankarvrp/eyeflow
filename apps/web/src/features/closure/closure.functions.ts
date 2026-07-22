@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { isAdminRole, requireSession } from "../auth/auth.server";
+import { getAccessibleDepartments, isAdminRole, requireSession } from "../auth/auth.server";
 import { publishCollectionChanged } from "../revenue/collection-events.server";
 import { closeBusinessDay, reopenBusinessDay, signOffCollectionPeriod } from "./closure.server";
 import { closeDaySchema, reopenDaySchema, signOffCollectionSchema } from "./closure-schema";
@@ -33,8 +33,18 @@ export const reopenDay = createServerFn({ method: "POST" })
 export const signOffCollection = createServerFn({ method: "POST" })
   .validator(signOffCollectionSchema)
   .handler(async ({ data }) => {
-    const session = await requireAdministrator();
-    const dashboard = await signOffCollectionPeriod(data, session.user.id);
+    const session = await requireSession();
+    const signerRole = isAdminRole(session.user.role) ? "admin" : "user";
+    const accessibleDepartments = await getAccessibleDepartments(
+      session.user.id,
+      session.user.role,
+    );
+    const dashboard = await signOffCollectionPeriod(
+      data,
+      session.user.id,
+      signerRole,
+      accessibleDepartments,
+    );
     publishCollectionChanged();
     return dashboard;
   });

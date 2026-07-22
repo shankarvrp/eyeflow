@@ -94,9 +94,10 @@ a **Synced receipt** badge. Once reviewed and saved, the linked EyeFlow payment 
 row without double-counting. A connected dashboard starts one non-blocking synchronization for today
 when it loads, then continues on the configured interval.
 
-Administrators see a reconciliation strip separating EMR gross receipts, refunds, EMR net, and
-manual EyeFlow collections. Closing a verified day stores its summary snapshot and locks collection
-mutations until an administrator reopens it with an audited reason.
+Every user sees mid-day and end-of-day handover badges with separate user and administrator status
+halves. Each period requires both roles to reconcile and sign off; administrators can close the day
+only after all four declarations tally with the overall collection. Closing stores a summary snapshot
+and locks collection mutations until an administrator reopens it with an audited reason.
 
 The connector is intended for a trusted local host with a graphical browser environment. The saved
 EMR session is sensitive, is ignored by Git, and must not be copied into images or shared storage.
@@ -130,4 +131,12 @@ kubectl apply -k infra/k8s/base
 
 ## Project status
 
-Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. The Add Collection workflow opens with OPD and Pharmacy as the primary departments; Investigation, OT, and Opticals can be added on demand. Every active department supports repeat payments in the same or different modes, and the complete patient collection is saved atomically with its collection date. Recent Collections and Patient-wise views include both EyeFlow and synchronized EMR receipts, are paginated, and open the same multi-department collection workflow for editing. Users may browse the current month and edit today's entries; administrators may browse extended history, enter or edit historical collections, and see weekly/monthly targets. Excel and PDF exports contain the complete role-filtered result set rather than only the visible page. Administrators can enable a live dashboard connection to receive pushed collection updates without refreshing. Better Auth protects the dashboard and server functions, department access is stored per user, and every payment records its actor. The local FOSS EHR browser connector synchronizes a minimal patient/appointment catalog for the collection picker without storing EMR credentials; automatic synchronization is explicitly opt-in and can otherwise be run only from the Sync EMR button. Reconciliation supports audited mid-day and later/end-day declarations, and daily closure remains locked until both declared periods tally with the day's overall collection. Audited role/department access management is also active. Configurable payment/provider masters and a shared multi-instance event backplane are planned next.
+Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. The Add Collection workflow opens with OPD and Pharmacy as the primary departments; Investigation, OT, and Opticals can be added on demand. Every active department supports repeat payments in the same or different modes, and the complete patient collection is saved atomically with its collection date. Recent Collections and Patient-wise views include both EyeFlow and synchronized EMR receipts, are paginated, and open the same multi-department collection workflow for editing. Users may browse the current month and edit today's entries; administrators may browse extended history, enter or edit historical collections, and see weekly/monthly targets. Excel and PDF exports contain the complete role-filtered result set rather than only the visible page. Administrators can enable a live dashboard connection to receive pushed collection updates without refreshing. Better Auth protects the dashboard and server functions, department access is stored per user, and every payment records its actor. The local FOSS EHR browser connector synchronizes a minimal patient/appointment catalog for the collection picker without storing EMR credentials; automatic synchronization is explicitly opt-in and can otherwise be run only from the Sync EMR button.
+
+Revenue now provides an operational payment ledger and department contribution view. Patients is an
+exhaustive, searchable, paginated EMR and EyeFlow directory with expandable visit and collection
+history. Reports includes date/department collections, cohort-based Pharmacy and Opticals conversion,
+administrator-only weekly/monthly target gaps, and observed patient time from the scheduled EMR
+appointment to the patient's last receipt. Department targets are configured by administrators.
+Audited role/department access management is active. Configurable payment/provider masters and a
+shared multi-instance event backplane are planned next.

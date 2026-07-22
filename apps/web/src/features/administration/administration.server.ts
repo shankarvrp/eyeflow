@@ -2,13 +2,18 @@ import { createDatabase } from "@eyeflow/db";
 import {
   auditEvents,
   departments,
+  departmentTargets,
   revenueTargets,
   user,
   userDepartmentAccess,
 } from "@eyeflow/db/schema";
 import type { DepartmentName } from "@eyeflow/shared";
 import { asc, eq } from "drizzle-orm";
-import type { UpdateRevenueTargets, UpdateUserAccess } from "./administration-schema";
+import type {
+  UpdateDepartmentTargets,
+  UpdateRevenueTargets,
+  UpdateUserAccess,
+} from "./administration-schema";
 
 let database: ReturnType<typeof createDatabase> | undefined;
 
@@ -36,6 +41,80 @@ export interface RevenueTargetSettings {
   daily: number;
   monthly: number;
   weekly: number;
+}
+
+export interface DepartmentTargetSettings {
+  daily: number;
+  department: DepartmentName;
+  monthly: number;
+  weekly: number;
+}
+
+export async function readDepartmentTargets(): Promise<DepartmentTargetSettings[]> {
+  const rows = await getDatabase()
+    .select({
+      daily: departmentTargets.dailyAmount,
+      department: departments.name,
+      monthly: departmentTargets.monthlyAmount,
+      weekly: departmentTargets.weeklyAmount,
+    })
+    .from(departments)
+    .leftJoin(departmentTargets, eq(departmentTargets.departmentId, departments.id))
+    .where(eq(departments.isActive, true))
+    .orderBy(departments.displayOrder);
+  return rows.map((row) => ({
+    daily: Number(row.daily ?? 0),
+    department: row.department as DepartmentName,
+    monthly: Number(row.monthly ?? 0),
+    weekly: Number(row.weekly ?? 0),
+  }));
+}
+
+export async function updateDepartmentTargets(
+  input: UpdateDepartmentTargets,
+  actorUserId: string,
+): Promise<DepartmentTargetSettings[]> {
+  const db = getDatabase();
+  const before = await readDepartmentTargets();
+  await db.transaction(async (transaction) => {
+    const departmentRows = await transaction
+      .select({ id: departments.id, name: departments.name })
+      .from(departments);
+    const departmentIds = new Map(departmentRows.map((entry) => [entry.name, entry.id]));
+    for (const target of input.targets) {
+      const departmentId = departmentIds.get(target.department);
+      if (!departmentId) throw new Error(`Unknown department: ${target.department}`);
+      await transaction
+        .insert(departmentTargets)
+        .values({
+          dailyAmount: target.daily.toFixed(2),
+          departmentId,
+          monthlyAmount: target.monthly.toFixed(2),
+          updatedByUserId: actorUserId,
+          weeklyAmount: target.weekly.toFixed(2),
+        })
+        .onConflictDoUpdate({
+          target: departmentTargets.departmentId,
+          set: {
+            dailyAmount: target.daily.toFixed(2),
+            monthlyAmount: target.monthly.toFixed(2),
+            updatedAt: new Date(),
+            updatedByUserId: actorUserId,
+            weeklyAmount: target.weekly.toFixed(2),
+          },
+        });
+    }
+    await transaction.insert(auditEvents).values({
+      action: "administration.department-targets.updated",
+      actorUserId,
+      after: { targets: input.targets },
+      before: { targets: before },
+      entityId: "clinic",
+      entityType: "department-targets",
+      reason: input.reason,
+    });
+  });
+  return readDepartmentTargets();
 }
 
 export async function readRevenueTargets(): Promise<RevenueTargetSettings> {

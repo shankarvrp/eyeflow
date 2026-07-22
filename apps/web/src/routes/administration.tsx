@@ -5,6 +5,7 @@ import { useState } from "react";
 import { AppShell } from "../components/app-shell";
 import {
   getAdministrationData,
+  saveDepartmentTargets,
   saveRevenueTargets,
   saveUserAccess,
 } from "../features/administration/administration.functions";
@@ -27,6 +28,10 @@ function Administration() {
   const [targetReason, setTargetReason] = useState("");
   const [targetMessage, setTargetMessage] = useState<string>();
   const [savingTargets, setSavingTargets] = useState(false);
+  const [departmentTargets, setDepartmentTargets] = useState(loaderData.departmentTargets);
+  const [departmentTargetReason, setDepartmentTargetReason] = useState("");
+  const [departmentTargetMessage, setDepartmentTargetMessage] = useState<string>();
+  const [savingDepartmentTargets, setSavingDepartmentTargets] = useState(false);
 
   const selectUser = (id: string) => {
     const selected = users.find((entry) => entry.id === id);
@@ -77,6 +82,25 @@ function Administration() {
       setTargetMessage(error instanceof Error ? error.message : "Unable to save revenue targets.");
     } finally {
       setSavingTargets(false);
+    }
+  };
+
+  const saveTargetsByDepartment = async () => {
+    try {
+      setSavingDepartmentTargets(true);
+      setDepartmentTargetMessage(undefined);
+      const updated = await saveDepartmentTargets({
+        data: { reason: departmentTargetReason, targets: departmentTargets },
+      });
+      setDepartmentTargets(updated);
+      setDepartmentTargetReason("");
+      setDepartmentTargetMessage("Department targets saved and applied to reports.");
+    } catch (error) {
+      setDepartmentTargetMessage(
+        error instanceof Error ? error.message : "Unable to save department targets.",
+      );
+    } finally {
+      setSavingDepartmentTargets(false);
     }
   };
 
@@ -300,6 +324,79 @@ function Administration() {
           {targetMessage ? (
             <p className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
               <Check size={14} /> {targetMessage}
+            </p>
+          ) : null}
+        </article>
+
+        <article className="panel mt-5 p-5 sm:p-6">
+          <div className="border-b border-[var(--border)] pb-5">
+            <h2 className="panel-title flex items-center gap-2">
+              <Gauge size={18} /> Department targets
+            </h2>
+            <p className="panel-subtitle">
+              Configure the targets used by weekly and monthly gap reports. Administrator-only.
+            </p>
+          </div>
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left">
+              <thead className="text-xs text-[var(--muted)]">
+                <tr>
+                  <th className="pb-3 font-semibold">Department</th>
+                  <th className="pb-3 font-semibold">Daily</th>
+                  <th className="pb-3 font-semibold">Weekly</th>
+                  <th className="pb-3 font-semibold">Monthly</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {departmentTargets.map((target, index) => (
+                  <tr key={target.department}>
+                    <td className="py-3 text-sm font-semibold">{target.department}</td>
+                    {(["daily", "weekly", "monthly"] as const).map((period) => (
+                      <td className="py-3 pr-3" key={period}>
+                        <input
+                          aria-label={`${target.department} ${period} target`}
+                          className="form-control"
+                          min="0"
+                          onChange={(event) => {
+                            const updated = departmentTargets.map((entry, entryIndex) =>
+                              entryIndex === index
+                                ? { ...entry, [period]: Number(event.target.value || 0) }
+                                : entry,
+                            );
+                            setDepartmentTargets(updated);
+                          }}
+                          step="1000"
+                          type="number"
+                          value={target[period]}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-5 flex flex-col gap-3 border-t border-[var(--border)] pt-5 sm:flex-row sm:items-end sm:justify-between">
+            <label className="w-full sm:max-w-lg">
+              <span className="form-label">Audit reason</span>
+              <input
+                className="form-control w-full"
+                onChange={(event) => setDepartmentTargetReason(event.target.value)}
+                placeholder="Department planning review"
+                value={departmentTargetReason}
+              />
+            </label>
+            <Button
+              disabled={savingDepartmentTargets || departmentTargetReason.trim().length < 3}
+              onClick={() => void saveTargetsByDepartment()}
+            >
+              <Save size={16} />
+              {savingDepartmentTargets ? "Saving…" : "Save department targets"}
+            </Button>
+          </div>
+          {departmentTargetMessage ? (
+            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              <Check size={14} /> {departmentTargetMessage}
             </p>
           ) : null}
         </article>

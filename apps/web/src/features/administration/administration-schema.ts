@@ -36,3 +36,26 @@ export const updateRevenueTargetsSchema = z
   });
 
 export type UpdateRevenueTargets = z.infer<typeof updateRevenueTargetsSchema>;
+
+export const departmentTargetSchema = z
+  .object({
+    daily: z.number().min(0).max(100_000_000),
+    department: z.enum(departments),
+    monthly: z.number().min(0).max(100_000_000),
+    weekly: z.number().min(0).max(100_000_000),
+  })
+  .refine((value) => value.weekly >= value.daily, {
+    message: "Weekly department target must be at least its daily target",
+    path: ["weekly"],
+  })
+  .refine((value) => value.monthly >= value.weekly, {
+    message: "Monthly department target must be at least its weekly target",
+    path: ["monthly"],
+  });
+
+export const updateDepartmentTargetsSchema = z.object({
+  reason: z.string().trim().min(3).max(240),
+  targets: z.array(departmentTargetSchema).min(1).max(departments.length),
+});
+
+export type UpdateDepartmentTargets = z.infer<typeof updateDepartmentTargetsSchema>;

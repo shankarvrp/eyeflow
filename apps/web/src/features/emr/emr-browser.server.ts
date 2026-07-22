@@ -141,6 +141,7 @@ export async function scrapeEmrAppointments(date: string): Promise<EmrAppointmen
             externalAppointmentId: appointment.appointmentId,
             externalPatientId,
             patientName: appointment.patientName,
+            scheduledAt: new Date(`${date}T${appointment.scheduledTime}:00+05:30`).toISOString(),
             visitType: appointment.visitType,
           });
         } catch {

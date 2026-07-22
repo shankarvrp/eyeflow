@@ -9,6 +9,9 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RevenueRouteImport } from './routes/revenue'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as PatientsRouteImport } from './routes/patients'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdministrationRouteImport } from './routes/administration'
 import { Route as IndexRouteImport } from './routes/index'
@@ -17,6 +20,21 @@ import { Route as ApiExportsCollectionsRouteImport } from './routes/api/exports/
 import { Route as ApiEmrImportRouteImport } from './routes/api/emr/import'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
+const RevenueRoute = RevenueRouteImport.update({
+  id: '/revenue',
+  path: '/revenue',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PatientsRoute = PatientsRouteImport.update({
+  id: '/patients',
+  path: '/patients',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -57,6 +75,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/administration': typeof AdministrationRoute
   '/login': typeof LoginRoute
+  '/patients': typeof PatientsRoute
+  '/reports': typeof ReportsRoute
+  '/revenue': typeof RevenueRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/emr/import': typeof ApiEmrImportRoute
   '/api/exports/collections': typeof ApiExportsCollectionsRoute
@@ -66,6 +87,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/administration': typeof AdministrationRoute
   '/login': typeof LoginRoute
+  '/patients': typeof PatientsRoute
+  '/reports': typeof ReportsRoute
+  '/revenue': typeof RevenueRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/emr/import': typeof ApiEmrImportRoute
   '/api/exports/collections': typeof ApiExportsCollectionsRoute
@@ -76,6 +100,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/administration': typeof AdministrationRoute
   '/login': typeof LoginRoute
+  '/patients': typeof PatientsRoute
+  '/reports': typeof ReportsRoute
+  '/revenue': typeof RevenueRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/emr/import': typeof ApiEmrImportRoute
   '/api/exports/collections': typeof ApiExportsCollectionsRoute
@@ -87,6 +114,9 @@ export interface FileRouteTypes {
     | '/'
     | '/administration'
     | '/login'
+    | '/patients'
+    | '/reports'
+    | '/revenue'
     | '/api/auth/$'
     | '/api/emr/import'
     | '/api/exports/collections'
@@ -96,6 +126,9 @@ export interface FileRouteTypes {
     | '/'
     | '/administration'
     | '/login'
+    | '/patients'
+    | '/reports'
+    | '/revenue'
     | '/api/auth/$'
     | '/api/emr/import'
     | '/api/exports/collections'
@@ -105,6 +138,9 @@ export interface FileRouteTypes {
     | '/'
     | '/administration'
     | '/login'
+    | '/patients'
+    | '/reports'
+    | '/revenue'
     | '/api/auth/$'
     | '/api/emr/import'
     | '/api/exports/collections'
@@ -115,6 +151,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdministrationRoute: typeof AdministrationRoute
   LoginRoute: typeof LoginRoute
+  PatientsRoute: typeof PatientsRoute
+  ReportsRoute: typeof ReportsRoute
+  RevenueRoute: typeof RevenueRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiEmrImportRoute: typeof ApiEmrImportRoute
   ApiExportsCollectionsRoute: typeof ApiExportsCollectionsRoute
@@ -123,6 +162,27 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/revenue': {
+      id: '/revenue'
+      path: '/revenue'
+      fullPath: '/revenue'
+      preLoaderRoute: typeof RevenueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/patients': {
+      id: '/patients'
+      path: '/patients'
+      fullPath: '/patients'
+      preLoaderRoute: typeof PatientsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -179,6 +239,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdministrationRoute: AdministrationRoute,
   LoginRoute: LoginRoute,
+  PatientsRoute: PatientsRoute,
+  ReportsRoute: ReportsRoute,
+  RevenueRoute: RevenueRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiEmrImportRoute: ApiEmrImportRoute,
   ApiExportsCollectionsRoute: ApiExportsCollectionsRoute,

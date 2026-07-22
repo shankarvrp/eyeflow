@@ -119,6 +119,7 @@ export const emrAppointments = pgTable(
       .notNull()
       .references(() => emrPatients.id, { onDelete: "cascade" }),
     appointmentDate: date("appointment_date").notNull(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
     visitType: text("visit_type"),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -232,6 +233,7 @@ export const collectionSignoffs = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     businessDate: date("business_date").notNull(),
     period: text("period").notNull(),
+    signerRole: text("signer_role").notNull().default("admin"),
     declaredCash: numeric("declared_cash", { precision: 12, scale: 2 }).notNull(),
     declaredOnline: numeric("declared_online", { precision: 12, scale: 2 }).notNull(),
     declaredCredit: numeric("declared_credit", { precision: 12, scale: 2 }).notNull(),
@@ -247,7 +249,11 @@ export const collectionSignoffs = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("collection_signoffs_date_period_uidx").on(table.businessDate, table.period),
+    uniqueIndex("collection_signoffs_date_period_role_uidx").on(
+      table.businessDate,
+      table.period,
+      table.signerRole,
+    ),
     index("collection_signoffs_date_idx").on(table.businessDate),
   ],
 );
@@ -263,6 +269,22 @@ export const revenueTargets = pgTable("revenue_targets", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const departmentTargets = pgTable(
+  "department_targets",
+  {
+    departmentId: uuid("department_id")
+      .primaryKey()
+      .references(() => departments.id, { onDelete: "cascade" }),
+    dailyAmount: numeric("daily_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    weeklyAmount: numeric("weekly_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    monthlyAmount: numeric("monthly_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    updatedByUserId: text("updated_by_user_id").references(() => user.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("department_targets_department_idx").on(table.departmentId)],
+);
 
 export const userDepartmentAccess = pgTable(
   "user_department_access",

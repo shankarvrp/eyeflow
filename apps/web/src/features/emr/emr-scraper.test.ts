@@ -12,6 +12,7 @@ describe("EMR scraper parsing", () => {
       appointmentId: "abc123",
       href: "/clinical/opd/appointments/abc123?current_date=2026-07-18",
       patientName: "Example Patient",
+      scheduledTime: "11:48",
       visitType: "New",
     });
   });

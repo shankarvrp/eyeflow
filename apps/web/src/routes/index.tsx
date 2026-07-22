@@ -105,11 +105,16 @@ function Dashboard() {
   const [emrMessage, setEmrMessage] = useState<string>();
   const initialEmrSyncStarted = useRef(false);
   const isAdmin = loaderData.session.user.role?.split(",").includes("admin") ?? false;
-  const todayLabel = new Intl.DateTimeFormat("en-GB", {
+  const dateFormatter = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "long",
     weekday: "long",
-  }).format(new Date());
+    year: "numeric",
+  });
+  const headingDate =
+    query.from === query.to
+      ? dateFormatter.format(new Date(`${query.from}T12:00:00`))
+      : `${dateFormatter.format(new Date(`${query.from}T12:00:00`))} – ${dateFormatter.format(new Date(`${query.to}T12:00:00`))}`;
   const activePage = collectionTab === "recent" ? query.collectionPage : query.patientPage;
   const activeTotal =
     collectionTab === "recent" ? pagination.totalCollections : pagination.totalPatients;
@@ -191,6 +196,32 @@ function Dashboard() {
     setAutoSyncEnabled(window.localStorage.getItem("eyeflow.emr-auto-sync") === "enabled");
     setAutoSyncReady(true);
   }, []);
+
+  useEffect(() => {
+    const openCollectionOnEnter = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Enter" ||
+        event.repeat ||
+        !ready ||
+        addCollectionOpen ||
+        patientWorkspaceOpen
+      )
+        return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest(
+          "input, textarea, select, button, a, [role='dialog'], [contenteditable='true']",
+        )
+      )
+        return;
+      event.preventDefault();
+      setPrefillEmrPatient(null);
+      setAddCollectionOpen(true);
+    };
+    window.addEventListener("keydown", openCollectionOnEnter);
+    return () => window.removeEventListener("keydown", openCollectionOnEnter);
+  }, [addCollectionOpen, patientWorkspaceOpen, ready]);
 
   useEffect(() => {
     if (
@@ -355,18 +386,7 @@ function Dashboard() {
       <section className="animate-in">
         <div className="mb-8 flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-              <span className="size-2 rounded-full bg-emerald-500" />
-              {todayLabel}
-            </div>
-            <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
-              Good morning, {loaderData.session.user.name}
-            </h1>
-            <p className="mt-2 text-[var(--muted-strong)]">
-              {query.from === query.to
-                ? "Here’s how your clinic performed on the selected day."
-                : "Here’s how your clinic performed across the selected period."}
-            </p>
+            <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">{headingDate}</h1>
           </div>
           <div className="flex flex-wrap gap-2">
             {isAdmin && !emrStatus.connected ? (
@@ -460,14 +480,16 @@ function Dashboard() {
           {emrMessage ? <p className="basis-full text-xs font-medium">{emrMessage}</p> : null}
         </output>
 
-        {isAdmin && reconciliation && signoffs && query.from === query.to ? (
+        {reconciliation && signoffs && query.from === query.to ? (
           <CollectionSignoffPanel
             businessDate={query.from}
             closure={closure}
             closureError={closureError}
             closureOperation={closureOperation}
             closureReason={closureReason}
+            currentRole={isAdmin ? "admin" : "user"}
             disabled={closure?.status === "closed"}
+            isAdmin={isAdmin}
             onChangeClosure={changeClosure}
             onClosureReasonChange={setClosureReason}
             onSignOff={saveSignoff}

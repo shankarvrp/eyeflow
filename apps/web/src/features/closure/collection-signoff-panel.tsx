@@ -7,15 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@eyeflow/ui";
-import {
-  AlertCircle,
-  CheckCircle2,
-  Clock3,
-  IndianRupee,
-  LockKeyhole,
-  Scale,
-  UnlockKeyhole,
-} from "lucide-react";
+import { CheckCircle2, Clock3, IndianRupee, LockKeyhole, Scale, UnlockKeyhole } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { DashboardData, DashboardSummary } from "../dashboard/dashboard-data";
 import type { SignOffCollection } from "./closure-schema";
@@ -26,7 +18,9 @@ interface CollectionSignoffPanelProps {
   closureError: string | undefined;
   closureOperation: boolean;
   closureReason: string;
+  currentRole: "admin" | "user";
   disabled: boolean;
+  isAdmin: boolean;
   onChangeClosure: () => Promise<void>;
   onClosureReasonChange: (reason: string) => void;
   onSignOff: (input: SignOffCollection) => Promise<void>;
@@ -52,7 +46,9 @@ export function CollectionSignoffPanel({
   closureError,
   closureOperation,
   closureReason,
+  currentRole,
   disabled,
+  isAdmin,
   onChangeClosure,
   onClosureReasonChange,
   onSignOff,
@@ -69,8 +65,12 @@ export function CollectionSignoffPanel({
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    const existingMidday = signoffs.periods.find((period) => period.period === "midday");
-    const existingEnd = signoffs.periods.find((period) => period.period === "endofday");
+    const existingMidday = signoffs.periods.find(
+      (period) => period.period === "midday" && period.signerRole === currentRole,
+    );
+    const existingEnd = signoffs.periods.find(
+      (period) => period.period === "endofday" && period.signerRole === currentRole,
+    );
     setDrafts({
       midday: existingMidday
         ? {
@@ -97,7 +97,14 @@ export function CollectionSignoffPanel({
           }
         : emptyDraft,
     });
-  }, [signoffs.periods, summary.cash, summary.credit, summary.discount, summary.online]);
+  }, [
+    currentRole,
+    signoffs.periods,
+    summary.cash,
+    summary.credit,
+    summary.discount,
+    summary.online,
+  ]);
 
   const save = async (period: SignoffPeriod) => {
     try {
@@ -115,13 +122,20 @@ export function CollectionSignoffPanel({
     setDrafts((current) => ({ ...current, [period]: { ...current[period], ...change } }));
 
   const closeReady =
-    signoffs.periods.length === 2 &&
-    Math.abs(signoffs.variance) < 0.01 &&
+    signoffs.periods.length === 4 &&
+    signoffs.periods.every(
+      (period) => Math.abs(period.declaredNet - period.calculatedNet) < 0.01,
+    ) &&
     Math.abs(
-      signoffs.periods.reduce((total, period) => total + period.calculatedNet, 0) - summary.revenue,
+      (["midday", "endofday"] as const).reduce((total, period) => {
+        const approval = signoffs.periods.find((entry) => entry.period === period);
+        return total + (approval?.calculatedNet ?? 0);
+      }, 0) - summary.revenue,
     ) < 0.01;
 
-  const activeSaved = signoffs.periods.find((period) => period.period === activePeriod);
+  const activeSaved = signoffs.periods.find(
+    (period) => period.period === activePeriod && period.signerRole === currentRole,
+  );
   const activeDraft = activePeriod ? drafts[activePeriod] : undefined;
   const middaySaved = signoffs.periods.find((period) => period.period === "midday");
   const expectedCaptured = activeSaved
@@ -151,7 +165,7 @@ export function CollectionSignoffPanel({
               key={period}
               onClick={() => setActivePeriod(period)}
               period={period}
-              saved={signoffs.periods.find((entry) => entry.period === period)}
+              saved={signoffs.periods.filter((entry) => entry.period === period)}
             />
           ))}
         </div>
@@ -189,7 +203,10 @@ export function CollectionSignoffPanel({
                   <span
                     className={cn(
                       "rounded-full px-3 py-1 text-xs font-bold",
-                      Math.abs(signoffs.variance) < 0.01 && signoffs.periods.length === 2
+                      signoffs.periods.length === 4 &&
+                        signoffs.periods.every(
+                          (period) => Math.abs(period.declaredNet - period.calculatedNet) < 0.01,
+                        )
                         ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                         : "bg-amber-500/10 text-amber-700 dark:text-amber-300",
                     )}
@@ -215,6 +232,35 @@ export function CollectionSignoffPanel({
               </section>
 
               <section>
+                <div className="mb-4 grid gap-2 sm:grid-cols-2">
+                  {(["user", "admin"] as const).map((role) => {
+                    const approval = signoffs.periods.find(
+                      (entry) => entry.period === activePeriod && entry.signerRole === role,
+                    );
+                    const matches =
+                      approval && Math.abs(approval.declaredNet - approval.calculatedNet) < 0.01;
+                    return (
+                      <div
+                        className={cn(
+                          "rounded-xl border px-3 py-2 text-xs",
+                          matches
+                            ? "border-emerald-500/20 bg-emerald-500/[0.07]"
+                            : approval
+                              ? "border-rose-500/20 bg-rose-500/[0.07]"
+                              : "border-amber-500/20 bg-amber-500/[0.07]",
+                        )}
+                        key={role}
+                      >
+                        <p className="font-bold capitalize">{role} approval</p>
+                        <p className="mt-1 text-[var(--muted-strong)]">
+                          {approval
+                            ? `${matches ? "Handed over" : "Mismatch"} by ${approval.signedByName}`
+                            : "Pending"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     {activeSaved ? (
@@ -222,7 +268,7 @@ export function CollectionSignoffPanel({
                     ) : (
                       <Clock3 className="text-amber-500" size={18} />
                     )}
-                    <h3 className="text-sm font-bold">Declare collection</h3>
+                    <h3 className="text-sm font-bold capitalize">Your {currentRole} declaration</h3>
                   </div>
                   <span className="text-xs text-[var(--muted)]">
                     Captured {formatCurrency(expectedCaptured)}
@@ -288,7 +334,7 @@ export function CollectionSignoffPanel({
                 </div>
               </section>
 
-              {activePeriod === "endofday" ? (
+              {activePeriod === "endofday" && isAdmin ? (
                 <section className="flex flex-col gap-3 border-t border-[var(--border)] pt-5 lg:flex-row lg:items-end lg:justify-between">
                   <div>
                     <p className="flex items-center gap-2 text-sm font-bold">
@@ -356,37 +402,69 @@ interface HandoverBadgeProps {
   closureStatus: "closed" | "open" | undefined;
   onClick: () => void;
   period: SignoffPeriod;
-  saved: NonNullable<DashboardData["signoffs"]>["periods"][number] | undefined;
+  saved: NonNullable<DashboardData["signoffs"]>["periods"];
 }
 
 function HandoverBadge({ closureStatus, onClick, period, saved }: HandoverBadgeProps) {
-  const variance = saved ? saved.declaredNet - saved.calculatedNet : undefined;
   const isClosed = period === "endofday" && closureStatus === "closed";
-  const isMismatch = variance !== undefined && Math.abs(variance) >= 0.01;
   const label = period === "midday" ? "Mid-day" : "End-of-day";
-  const status = isClosed ? "Closed" : isMismatch ? "Mismatch" : saved ? "Handed over" : "Pending";
-  const Icon =
-    isClosed || (saved && !isMismatch) ? CheckCircle2 : isMismatch ? AlertCircle : Clock3;
+  const roleStatus = (role: "admin" | "user") => {
+    const approval = saved.find((entry) => entry.signerRole === role);
+    if (!approval) return "pending" as const;
+    return Math.abs(approval.declaredNet - approval.calculatedNet) < 0.01
+      ? ("complete" as const)
+      : ("mismatch" as const);
+  };
+  const userStatus = roleStatus("user");
+  const adminStatus = roleStatus("admin");
+  const accessibleStatus = isClosed
+    ? "closed"
+    : `User ${statusLabel(userStatus)}, Admin ${statusLabel(adminStatus)}`;
 
   return (
     <button
-      aria-label={`Open ${label} reconciliation: ${status}`}
+      aria-label={`Open ${label} reconciliation: ${accessibleStatus}`}
       className={cn(
         "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-bold transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60",
-        isClosed || (saved && !isMismatch)
+        isClosed || (userStatus === "complete" && adminStatus === "complete")
           ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          : isMismatch
+          : userStatus === "mismatch" || adminStatus === "mismatch"
             ? "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300"
             : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
       )}
       onClick={onClick}
       type="button"
     >
-      <Icon size={14} />
+      <span
+        aria-hidden="true"
+        className="flex size-5 overflow-hidden rounded-full border border-current/20 bg-[var(--panel)]"
+      >
+        <span className={cn("h-full w-1/2", statusColor(userStatus))} />
+        <span className={cn("h-full w-1/2", statusColor(adminStatus))} />
+      </span>
       <span>{label}</span>
-      <span className="font-medium opacity-75">· {status}</span>
+      <span className="font-medium opacity-75">
+        · {isClosed ? "Closed" : `${completedCount(userStatus, adminStatus)}/2`}
+      </span>
     </button>
   );
+}
+
+type ApprovalStatus = "complete" | "mismatch" | "pending";
+
+function statusColor(status: ApprovalStatus) {
+  if (status === "complete") return "bg-emerald-500";
+  if (status === "mismatch") return "bg-rose-500";
+  return "bg-amber-400";
+}
+
+function statusLabel(status: ApprovalStatus) {
+  if (status === "complete") return "handed over";
+  return status;
+}
+
+function completedCount(userStatus: ApprovalStatus, adminStatus: ApprovalStatus) {
+  return Number(userStatus === "complete") + Number(adminStatus === "complete");
 }
 
 function ReconciliationValue({ label, value }: { label: string; value: number }) {

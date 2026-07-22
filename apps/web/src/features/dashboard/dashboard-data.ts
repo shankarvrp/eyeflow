@@ -79,7 +79,9 @@ export interface DashboardData {
       declaredOnline: number;
       note: string;
       period: "endofday" | "midday";
+      signedByName: string;
       signedAt: string;
+      signerRole: "admin" | "user";
     }>;
     variance: number;
   };

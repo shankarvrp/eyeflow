@@ -6,6 +6,7 @@ export const emrAppointmentImportSchema = z.object({
   externalAppointmentId: z.string().trim().min(1).max(120),
   externalPatientId: z.string().trim().min(1).max(120),
   patientName: z.string().trim().min(2).max(120),
+  scheduledAt: z.string().datetime().nullable().default(null),
   visitType: z.string().trim().max(80).nullable(),
 });
 

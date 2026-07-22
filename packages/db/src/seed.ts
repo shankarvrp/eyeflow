@@ -1,6 +1,6 @@
 import { count, eq } from "drizzle-orm";
 import { createDatabase } from "./index";
-import { customers, departments, payments } from "./schema";
+import { customers, departments, departmentTargets, payments } from "./schema";
 
 const databaseUrl =
   process.env.DATABASE_URL ?? "postgresql://eyeflow:eyeflow_dev_password@localhost:5432/eyeflow";
@@ -16,6 +16,28 @@ const departmentSeed = [
 ];
 
 await db.insert(departments).values(departmentSeed).onConflictDoNothing();
+
+const departmentRowsForTargets = await db.select().from(departments);
+const targetDefaults = [
+  { department: "OPD", daily: "40000", weekly: "240000", monthly: "1000000" },
+  { department: "Investigation", daily: "30000", weekly: "180000", monthly: "750000" },
+  { department: "Pharmacy", daily: "35000", weekly: "210000", monthly: "875000" },
+  { department: "OT", daily: "55000", weekly: "330000", monthly: "1375000" },
+  { department: "Opticals", daily: "40000", weekly: "240000", monthly: "1000000" },
+];
+for (const target of targetDefaults) {
+  const department = departmentRowsForTargets.find((entry) => entry.name === target.department);
+  if (!department) continue;
+  await db
+    .insert(departmentTargets)
+    .values({
+      dailyAmount: target.daily,
+      departmentId: department.id,
+      monthlyAmount: target.monthly,
+      weeklyAmount: target.weekly,
+    })
+    .onConflictDoNothing();
+}
 
 const paymentCountRow = (await db.select({ paymentCount: count() }).from(payments))[0];
 const paymentCount = paymentCountRow?.paymentCount ?? 0;

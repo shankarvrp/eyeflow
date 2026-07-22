@@ -37,7 +37,8 @@ async function signIn(
 
 test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await signIn(page);
-  await expect(page.getByRole("heading", { name: "Good morning, Dr. Shankar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /July 2026/ })).toBeVisible();
+  await expect(page.getByText("Good morning, Dr. Shankar")).toHaveCount(0);
   await expect(page.getByText("Collection revenue")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add collection" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sync EMR" })).toBeVisible();
@@ -56,6 +57,9 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await middayBadge.click();
   await expect(page.getByRole("heading", { name: "Mid-day collection handover" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Collection reconciliation" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Add patient collections" })).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Enable live" }).click();
   await expect(page.locator('button[aria-pressed="true"]')).toBeVisible();
@@ -79,8 +83,26 @@ test("administrators can open role and department access management", async ({ p
     page.getByRole("button", { name: /Collection User user@eyeflow\.local/ }),
   ).toBeVisible();
   await expect(page.getByLabel("Role")).toBeVisible();
-  await expect(page.getByLabel("Daily target")).toHaveValue("200000");
+  await expect(page.getByLabel("Daily target", { exact: true })).toHaveValue("200000");
   await expect(page.getByRole("button", { name: "Save targets" })).toBeDisabled();
+  await expect(page.getByRole("heading", { name: "Department targets" })).toBeVisible();
+  await expect(page.getByLabel("OPD weekly target")).toBeVisible();
+});
+
+test("revenue, patients, and reports modules are operational", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("link", { name: "Revenue" }).click();
+  await expect(page).toHaveURL("/revenue");
+  await expect(page.getByRole("heading", { name: "Revenue workspace" })).toBeVisible();
+  await page.getByRole("link", { name: "Patients" }).click();
+  await expect(page).toHaveURL("/patients");
+  await expect(page.getByRole("heading", { name: "All patients" })).toBeVisible();
+  await expect(page.getByText("Patient-wise expanded view")).toBeVisible();
+  await page.getByRole("link", { name: "Reports" }).click();
+  await expect(page).toHaveURL("/reports");
+  await expect(page.getByRole("heading", { name: "Reports" })).toBeVisible();
+  await expect(page.getByText("Department and date-wise collection")).toBeVisible();
+  await expect(page.getByText("Patient time spent")).toBeVisible();
 });
 
 test("adds collections for multiple departments in one save", async ({ page }) => {
@@ -142,6 +164,7 @@ test("normal users see only daily targets and can edit today's collections", asy
   await expect(page.getByText("Weekly target")).toHaveCount(0);
   await expect(page.getByText("Monthly target")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Enable live" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Open Mid-day reconciliation:/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Add collection" }).click();
   await page.getByLabel("Patient name").fill(patientName);

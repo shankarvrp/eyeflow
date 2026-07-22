@@ -22,9 +22,9 @@ import { ThemeToggle } from "./theme-toggle";
 
 const navigation = [
   { label: "Overview", icon: LayoutDashboard, href: "/" as const },
-  { label: "Revenue", icon: ReceiptIndianRupee },
-  { label: "Patients", icon: Users },
-  { label: "Reports", icon: BarChart3 },
+  { label: "Revenue", icon: ReceiptIndianRupee, href: "/revenue" as const },
+  { label: "Patients", icon: Users, href: "/patients" as const },
+  { label: "Reports", icon: BarChart3, href: "/reports" as const },
 ];
 
 interface AppShellProps {
@@ -91,9 +91,8 @@ export function AppShell({ children, user }: AppShellProps) {
               active
                 ? "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
                 : "text-[var(--muted-strong)] hover:bg-[var(--hover)] hover:text-[var(--foreground)]",
-              !href && "cursor-not-allowed opacity-55",
             );
-            return href ? (
+            return (
               <Link
                 className={className}
                 key={label}
@@ -104,17 +103,6 @@ export function AppShell({ children, user }: AppShellProps) {
                 {label}
                 {active ? <span className="ml-auto size-1.5 rounded-full bg-emerald-500" /> : null}
               </Link>
-            ) : (
-              <button
-                className={className}
-                disabled
-                key={label}
-                title={`${label} module is coming next`}
-                type="button"
-              >
-                <Icon aria-hidden="true" size={18} />
-                {label}
-              </button>
             );
           })}
         </nav>

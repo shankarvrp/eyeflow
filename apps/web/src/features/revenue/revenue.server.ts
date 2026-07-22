@@ -9,6 +9,7 @@ import {
   emrReceipts,
   payments,
   revenueTargets,
+  user,
 } from "@eyeflow/db/schema";
 import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import type {
@@ -219,20 +220,16 @@ export async function readDashboardData(
             )
             .orderBy(desc(emrReceipts.occurredAt));
 
-  const reconciliationRows = isAdmin
-    ? await db
-        .select({
-          amount: emrReceipts.amount,
-          receiptType: emrReceipts.receiptType,
-          requiresReview: emrReceipts.requiresReview,
-        })
-        .from(emrReceipts)
-        .where(
-          and(gte(emrReceipts.occurredAt, bounds.start), lt(emrReceipts.occurredAt, bounds.end)),
-        )
-    : [];
+  const reconciliationRows = await db
+    .select({
+      amount: emrReceipts.amount,
+      receiptType: emrReceipts.receiptType,
+      requiresReview: emrReceipts.requiresReview,
+    })
+    .from(emrReceipts)
+    .where(and(gte(emrReceipts.occurredAt, bounds.start), lt(emrReceipts.occurredAt, bounds.end)));
   const [closure] =
-    isAdmin && query.from === query.to
+    query.from === query.to
       ? await db
           .select({
             closedAt: dailyClosures.closedAt,
@@ -253,7 +250,7 @@ export async function readDashboardData(
     .where(eq(revenueTargets.id, "clinic"))
     .limit(1);
   const signoffRows =
-    isAdmin && query.from === query.to
+    query.from === query.to
       ? await db
           .select({
             calculatedNet: collectionSignoffs.calculatedNet,
@@ -263,9 +260,12 @@ export async function readDashboardData(
             declaredOnline: collectionSignoffs.declaredOnline,
             note: collectionSignoffs.note,
             period: collectionSignoffs.period,
+            signedByName: user.name,
             signedAt: collectionSignoffs.signedAt,
+            signerRole: collectionSignoffs.signerRole,
           })
           .from(collectionSignoffs)
+          .innerJoin(user, eq(collectionSignoffs.signedByUserId, user.id))
           .where(eq(collectionSignoffs.businessDate, query.from))
           .orderBy(collectionSignoffs.signedAt)
       : [];
@@ -388,7 +388,7 @@ export async function readDashboardData(
   const patientOffset = (query.patientPage - 1) * query.pageSize;
 
   return {
-    ...(isAdmin && query.from === query.to
+    ...(query.from === query.to
       ? {
           closure: {
             closedAt: closure?.closedAt.toISOString() ?? null,
@@ -408,12 +408,8 @@ export async function readDashboardData(
     },
     patientCollections: allPatientCollections.slice(patientOffset, patientOffset + query.pageSize),
     recentCollections,
-    ...(isAdmin
-      ? {
-          reconciliation: buildReconciliation(reconciliationRows, persistedRows),
-        }
-      : {}),
-    ...(isAdmin && query.from === query.to
+    reconciliation: buildReconciliation(reconciliationRows, persistedRows),
+    ...(query.from === query.to
       ? {
           signoffs: buildSignoffSummary(signoffRows, totals.revenue),
         }
@@ -456,13 +452,19 @@ function buildSignoffSummary(
     declaredOnline: string;
     note: string;
     period: string;
+    signedByName: string;
     signedAt: Date;
+    signerRole: string;
   }>,
   overallTotal: number,
 ): NonNullable<DashboardData["signoffs"]> {
   const periods: NonNullable<DashboardData["signoffs"]>["periods"] = rows.flatMap((row) => {
     const period = row.period;
-    if (period !== "midday" && period !== "endofday") return [];
+    if (
+      (period !== "midday" && period !== "endofday") ||
+      (row.signerRole !== "admin" && row.signerRole !== "user")
+    )
+      return [];
     const declaredCash = Number(row.declaredCash);
     const declaredCredit = Number(row.declaredCredit);
     const declaredDiscount = Number(row.declaredDiscount);
@@ -477,11 +479,17 @@ function buildSignoffSummary(
         declaredOnline,
         note: row.note,
         period,
+        signedByName: row.signedByName,
         signedAt: row.signedAt.toISOString(),
+        signerRole: row.signerRole,
       },
     ];
   });
-  const declaredTotal = periods.reduce((total, period) => total + period.declaredNet, 0);
+  const canonicalPeriods = (["midday", "endofday"] as const).flatMap((period) => {
+    const approvals = periods.filter((entry) => entry.period === period);
+    return approvals.find((entry) => entry.signerRole === "admin") ?? approvals[0] ?? [];
+  });
+  const declaredTotal = canonicalPeriods.reduce((total, period) => total + period.declaredNet, 0);
   return {
     declaredTotal,
     overallTotal,

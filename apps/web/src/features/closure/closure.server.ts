@@ -42,17 +42,19 @@ export async function closeBusinessDay(businessDate: string, reason: string, act
     to: businessDate,
   });
   const completedSignoffs = dashboard.signoffs?.periods ?? [];
-  const capturedTotal = completedSignoffs.reduce(
-    (total, signoff) => total + signoff.calculatedNet,
-    0,
-  );
+  const capturedTotal = (["midday", "endofday"] as const).reduce((total, period) => {
+    const signoff = completedSignoffs.find((entry) => entry.period === period);
+    return total + (signoff?.calculatedNet ?? 0);
+  }, 0);
   if (
-    completedSignoffs.length !== 2 ||
-    Math.abs(dashboard.signoffs?.variance ?? Number.POSITIVE_INFINITY) >= 0.01 ||
+    completedSignoffs.length !== 4 ||
+    completedSignoffs.some(
+      (signoff) => Math.abs(signoff.declaredNet - signoff.calculatedNet) >= 0.01,
+    ) ||
     Math.abs(capturedTotal - dashboard.summary.revenue) >= 0.01
   ) {
     throw new Response(
-      "Complete both collection sign-offs and match their declared and captured totals to the day before closing.",
+      "Both a user and an administrator must approve each handover, and every declaration must match the captured total before closing.",
       { status: 409 },
     );
   }
@@ -105,7 +107,12 @@ export async function closeBusinessDay(businessDate: string, reason: string, act
   });
 }
 
-export async function signOffCollectionPeriod(input: SignOffCollection, actorUserId: string) {
+export async function signOffCollectionPeriod(
+  input: SignOffCollection,
+  actorUserId: string,
+  signerRole: "admin" | "user",
+  accessibleDepartments: string[] | null,
+) {
   const db = getDatabase();
   await assertCollectionDatesOpen([input.businessDate]);
   const dashboard = await readDashboardData(null, true, {
@@ -115,10 +122,14 @@ export async function signOffCollectionPeriod(input: SignOffCollection, actorUse
     patientPage: 1,
     to: input.businessDate,
   });
-  const midday = dashboard.signoffs?.periods.find((period) => period.period === "midday");
-  if (input.period === "endofday" && !midday) {
-    throw new Response("Complete the mid-day sign-off before the later sign-off.", { status: 409 });
+  const middayApprovals =
+    dashboard.signoffs?.periods.filter((period) => period.period === "midday") ?? [];
+  if (input.period === "endofday" && middayApprovals.length !== 2) {
+    throw new Response("Both user and administrator must approve the mid-day handover first.", {
+      status: 409,
+    });
   }
+  const midday = middayApprovals[0];
   const calculatedNet =
     input.period === "midday"
       ? dashboard.summary.revenue
@@ -130,6 +141,7 @@ export async function signOffCollectionPeriod(input: SignOffCollection, actorUse
       and(
         eq(collectionSignoffs.businessDate, input.businessDate),
         eq(collectionSignoffs.period, input.period),
+        eq(collectionSignoffs.signerRole, signerRole),
       ),
     )
     .limit(1);
@@ -146,10 +158,15 @@ export async function signOffCollectionPeriod(input: SignOffCollection, actorUse
         declaredOnline: input.declaredOnline.toFixed(2),
         note: input.note,
         period: input.period,
+        signerRole,
         signedByUserId: actorUserId,
       })
       .onConflictDoUpdate({
-        target: [collectionSignoffs.businessDate, collectionSignoffs.period],
+        target: [
+          collectionSignoffs.businessDate,
+          collectionSignoffs.period,
+          collectionSignoffs.signerRole,
+        ],
         set: {
           calculatedNet: calculatedNet.toFixed(2),
           declaredCash: input.declaredCash.toFixed(2),
@@ -165,14 +182,14 @@ export async function signOffCollectionPeriod(input: SignOffCollection, actorUse
     await transaction.insert(auditEvents).values({
       action: `revenue.collection.${input.period}.signed-off`,
       actorUserId,
-      after: { ...input, calculatedNet },
+      after: { ...input, calculatedNet, signerRole },
       before: before ?? {},
-      entityId: `${input.businessDate}:${input.period}`,
+      entityId: `${input.businessDate}:${input.period}:${signerRole}`,
       entityType: "collection-signoff",
       reason: input.note,
     });
   });
-  return readDashboardData(null, true, {
+  return readDashboardData(accessibleDepartments, signerRole === "admin", {
     collectionPage: 1,
     from: input.businessDate,
     pageSize: 10,
