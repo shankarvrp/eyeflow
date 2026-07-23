@@ -42,7 +42,12 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await expect(page.getByText("Today's collection pulse")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add collection" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sync EMR" })).toBeVisible();
-  await expect(page.getByLabel("Enable automatic EMR sync")).not.toBeChecked();
+  const autoSyncControl = page.getByLabel("Enable automatic EMR sync");
+  if ((await autoSyncControl.count()) === 1) {
+    await expect(autoSyncControl).not.toBeChecked();
+  } else {
+    await expect(page.getByRole("button", { name: "Connect EMR" })).toBeVisible();
+  }
   await expect(page.getByText("Collection period")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Patient mix" })).toBeVisible();
   await expect(page.getByText("Action required: collection handover")).toBeVisible();

@@ -161,12 +161,21 @@ function Dashboard() {
           `${status.patientCount} patient${status.patientCount === 1 ? "" : "s"} and ${status.receiptCount} receipt${status.receiptCount === 1 ? "" : "s"} synchronized for ${appointmentDate}.`,
         );
       } catch (error) {
-        setEmrMessage(error instanceof Error ? error.message : "Unable to synchronize the EMR.");
+        const status = await getEmrSyncStatus({ data: { appointmentDate } });
+        setEmrStatus(status);
+        const message = error instanceof Error ? error.message : "Unable to synchronize the EMR.";
+        setEmrMessage(
+          status.connected
+            ? message
+            : isAdmin
+              ? `${message} Select Connect EMR to sign in again.`
+              : `${message} Sign in as an administrator to reconnect the EMR.`,
+        );
       } finally {
         setEmrOperation("idle");
       }
     },
-    [applyDashboard, query],
+    [applyDashboard, isAdmin, query],
   );
 
   const connectToEmr = useCallback(async () => {
@@ -445,8 +454,12 @@ function Dashboard() {
                     variant="outline"
                   >
                     <Link2 size={14} />
-                    {emrOperation === "connecting" ? "Waiting…" : "Connect"}
+                    {emrOperation === "connecting" ? "Waiting for login…" : "Connect EMR"}
                   </Button>
+                ) : !emrStatus.connected ? (
+                  <span className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 font-bold text-amber-700 dark:text-amber-300">
+                    Administrator connection required
+                  </span>
                 ) : null}
                 <Button
                   disabled={!ready || !emrStatus.connected || emrOperation !== "idle"}
