@@ -21,6 +21,7 @@ import { closeDay, reopenDay, signOffCollection } from "../features/closure/clos
 import type { SignOffCollection } from "../features/closure/closure-schema";
 import { CollectionSignoffPanel } from "../features/closure/collection-signoff-panel";
 import {
+  type DashboardData,
   formatCurrency,
   type PatientCollectionSummary,
   type RecentCollection,
@@ -70,6 +71,7 @@ function Dashboard() {
   const [ready, setReady] = useState(false);
   const [summary, setSummary] = useState(loaderData.dashboard.summary);
   const [departments, setDepartments] = useState(loaderData.dashboard.departments);
+  const [patientMix, setPatientMix] = useState(loaderData.dashboard.patientMix);
   const [collections, setCollections] = useState(loaderData.dashboard.recentCollections);
   const [patientCollections, setPatientCollections] = useState(
     loaderData.dashboard.patientCollections,
@@ -120,11 +122,16 @@ function Dashboard() {
     () => departments.map((department) => department.name),
     [departments],
   );
+  const sortedDepartments = useMemo(
+    () => [...departments].sort((left, right) => right.amount - left.amount),
+    [departments],
+  );
 
   const applyDashboard = useCallback((updatedDashboard: typeof loaderData.dashboard) => {
     setCollections(updatedDashboard.recentCollections);
     setPatientCollections(updatedDashboard.patientCollections);
     setDepartments(updatedDashboard.departments);
+    setPatientMix(updatedDashboard.patientMix);
     setSummary(updatedDashboard.summary);
     setReconciliation(updatedDashboard.reconciliation);
     setClosure(updatedDashboard.closure);
@@ -394,92 +401,88 @@ function Dashboard() {
   return (
     <AppShell user={loaderData.session.user}>
       <section className="animate-in">
-        <div className="mb-8 flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
+        <div className="mb-5 flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
           <div>
             <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">{headingDate}</h1>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={!ready} onClick={() => setAddCollectionOpen(true)}>
-              <Plus size={17} />
-              Add collection
-            </Button>
+          <div className="flex flex-col gap-2 xl:items-end">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+              <section
+                aria-label="EMR synchronization"
+                className={cn(
+                  "flex flex-wrap items-center gap-2 rounded-xl border px-2.5 py-2 text-xs",
+                  emrStatus.connected
+                    ? "border-emerald-500/20 bg-emerald-500/[0.06]"
+                    : "border-amber-500/25 bg-amber-500/[0.08]",
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2 rounded-full",
+                    emrStatus.connected ? "bg-emerald-500" : "bg-amber-500",
+                  )}
+                />
+                <span className="font-bold">
+                  {emrStatus.connected ? "EMR connected" : "EMR not connected"}
+                </span>
+                <span className="hidden text-[var(--muted)] 2xl:inline">
+                  {emrStatus.connected
+                    ? `${emrStatus.patientCount} patients · synced ${
+                        emrStatus.lastSyncedAt
+                          ? new Intl.DateTimeFormat("en-IN", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }).format(new Date(emrStatus.lastSyncedAt))
+                          : "never"
+                      }`
+                    : "Connection required"}
+                </span>
+                {isAdmin && !emrStatus.connected ? (
+                  <Button
+                    disabled={!ready || emrOperation !== "idle"}
+                    onClick={() => void connectToEmr()}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <Link2 size={14} />
+                    {emrOperation === "connecting" ? "Waiting…" : "Connect"}
+                  </Button>
+                ) : null}
+                <Button
+                  disabled={!ready || !emrStatus.connected || emrOperation !== "idle"}
+                  onClick={() => void synchronizeEmr(query.to)}
+                  size="sm"
+                  variant="outline"
+                >
+                  <RefreshCw
+                    className={emrOperation === "syncing" ? "animate-spin" : undefined}
+                    size={14}
+                  />
+                  {emrOperation === "syncing" ? "Syncing…" : "Sync EMR"}
+                </Button>
+                {emrStatus.connected ? (
+                  <label className="flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1 font-semibold text-[var(--muted-strong)]">
+                    <input
+                      aria-label="Enable automatic EMR sync"
+                      checked={autoSyncEnabled}
+                      className="size-4 accent-emerald-500"
+                      onChange={(event) => changeAutoSync(event.target.checked)}
+                      type="checkbox"
+                    />
+                    Auto
+                  </label>
+                ) : null}
+              </section>
+              <Button disabled={!ready} onClick={() => setAddCollectionOpen(true)}>
+                <Plus size={17} />
+                Add collection
+              </Button>
+            </div>
+            {emrMessage ? (
+              <p className="max-w-2xl text-right text-xs font-medium">{emrMessage}</p>
+            ) : null}
           </div>
         </div>
-
-        <section
-          aria-label="EMR synchronization"
-          className={cn(
-            "mb-5 grid gap-3 rounded-2xl border px-4 py-3 text-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center",
-            emrStatus.connected
-              ? "border-emerald-500/20 bg-emerald-500/[0.06]"
-              : "border-amber-500/25 bg-amber-500/[0.08]",
-          )}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                "size-2 rounded-full",
-                emrStatus.connected ? "bg-emerald-500" : "bg-amber-500",
-              )}
-            />
-            <span className="font-semibold">
-              {emrStatus.connected ? "FOSS EHR connected" : "FOSS EHR not connected"}
-            </span>
-            <span className="text-[var(--muted-strong)]">
-              {emrStatus.connected
-                ? `${emrStatus.patientCount} patients · ${emrStatus.receiptCount} receipts for ${emrStatus.appointmentDate}`
-                : isAdmin
-                  ? "Connect once to enable patient synchronization."
-                  : "An administrator must connect the EMR."}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-            <span className="mr-1 text-xs text-[var(--muted)]">
-              {emrStatus.lastSyncedAt
-                ? `Last synced ${new Intl.DateTimeFormat("en-IN", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  }).format(new Date(emrStatus.lastSyncedAt))}`
-                : "Not synchronized yet"}
-            </span>
-            {isAdmin && !emrStatus.connected ? (
-              <Button
-                disabled={!ready || emrOperation !== "idle"}
-                onClick={() => void connectToEmr()}
-                size="sm"
-                variant="outline"
-              >
-                <Link2 size={15} />
-                {emrOperation === "connecting" ? "Waiting for login…" : "Connect EMR"}
-              </Button>
-            ) : null}
-            <Button
-              disabled={!ready || !emrStatus.connected || emrOperation !== "idle"}
-              onClick={() => void synchronizeEmr(query.to)}
-              size="sm"
-              variant="outline"
-            >
-              <RefreshCw
-                className={emrOperation === "syncing" ? "animate-spin" : undefined}
-                size={15}
-              />
-              {emrOperation === "syncing" ? "Syncing…" : "Sync EMR"}
-            </Button>
-            {emrStatus.connected ? (
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2.5 py-2 text-xs font-semibold text-[var(--muted-strong)]">
-                <input
-                  aria-label="Enable automatic EMR sync"
-                  checked={autoSyncEnabled}
-                  className="size-4 accent-emerald-500"
-                  onChange={(event) => changeAutoSync(event.target.checked)}
-                  type="checkbox"
-                />
-                Auto-sync every {emrStatus.autoSyncIntervalMinutes} min
-              </label>
-            ) : null}
-          </div>
-          {emrMessage ? <p className="text-xs font-medium xl:col-span-2">{emrMessage}</p> : null}
-        </section>
 
         {reconciliation && signoffs && query.from === query.to ? (
           <CollectionSignoffPanel
@@ -500,17 +503,36 @@ function Dashboard() {
           />
         ) : null}
 
-        <div className="panel mb-5 grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-          <div className="grid min-w-0 gap-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-            <Button
-              aria-label="Previous day"
-              disabled={loadingRange || (!isAdmin && query.from <= `${query.to.slice(0, 7)}-01`)}
-              onClick={() => moveOneDay(-1)}
-              size="sm"
-              variant="outline"
-            >
-              <ChevronLeft size={16} />
-            </Button>
+        <div className="panel mb-5 p-4">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-3">
+            <div>
+              <p className="text-sm font-bold">Collection period</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                {query.from === query.to ? query.from : `${query.from} to ${query.to}`}
+              </p>
+            </div>
+            <label>
+              <span className="form-label">Table size</span>
+              <select
+                aria-label="Rows per page"
+                className="form-control w-28"
+                onChange={(event) =>
+                  void loadDashboard({
+                    ...query,
+                    collectionPage: 1,
+                    pageSize: Number(event.target.value),
+                    patientPage: 1,
+                  })
+                }
+                value={query.pageSize}
+              >
+                <option value="10">10 rows</option>
+                <option value="25">25 rows</option>
+                <option value="50">50 rows</option>
+              </select>
+            </label>
+          </div>
+          <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
             <label className="min-w-0">
               <span className="form-label">From</span>
               <input
@@ -533,60 +555,51 @@ function Dashboard() {
                 value={draftTo}
               />
             </label>
-            <Button
-              aria-label="Next day"
-              disabled={loadingRange || query.to >= initialDashboardQuery.to}
-              onClick={() => moveOneDay(1)}
-              size="sm"
-              variant="outline"
-            >
-              <ChevronRight size={16} />
-            </Button>
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <Button
-              disabled={loadingRange || draftFrom > draftTo}
-              onClick={() =>
-                void loadDashboard({
-                  ...query,
-                  collectionPage: 1,
-                  from: draftFrom,
-                  patientPage: 1,
-                  to: draftTo,
-                })
-              }
-              size="sm"
-            >
-              {loadingRange ? "Loading…" : "Apply range"}
-            </Button>
-            <Button
-              disabled={loadingRange}
-              onClick={() => void loadDashboard(initialDashboardQuery)}
-              size="sm"
-              variant="ghost"
-            >
-              Today
-            </Button>
-            <label>
-              <span className="form-label">Table size</span>
-              <select
-                aria-label="Rows per page"
-                className="form-control w-24"
-                onChange={(event) =>
+            <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+              <Button
+                aria-label="Previous day"
+                disabled={loadingRange || (!isAdmin && query.from <= `${query.to.slice(0, 7)}-01`)}
+                onClick={() => moveOneDay(-1)}
+                size="sm"
+                variant="outline"
+              >
+                <ChevronLeft size={16} />
+                Previous
+              </Button>
+              <Button
+                aria-label="Next day"
+                disabled={loadingRange || query.to >= initialDashboardQuery.to}
+                onClick={() => moveOneDay(1)}
+                size="sm"
+                variant="outline"
+              >
+                Next
+                <ChevronRight size={16} />
+              </Button>
+              <Button
+                disabled={loadingRange}
+                onClick={() => void loadDashboard(initialDashboardQuery)}
+                size="sm"
+                variant="ghost"
+              >
+                Today
+              </Button>
+              <Button
+                disabled={loadingRange || draftFrom > draftTo}
+                onClick={() =>
                   void loadDashboard({
                     ...query,
                     collectionPage: 1,
-                    pageSize: Number(event.target.value),
+                    from: draftFrom,
                     patientPage: 1,
+                    to: draftTo,
                   })
                 }
-                value={query.pageSize}
+                size="sm"
               >
-                <option value="10">10 rows</option>
-                <option value="25">25 rows</option>
-                <option value="50">50 rows</option>
-              </select>
-            </label>
+                {loadingRange ? "Loading…" : "Apply range"}
+              </Button>
+            </div>
           </div>
         </div>
         {rangeError ? (
@@ -639,15 +652,22 @@ function Dashboard() {
               <div className="mt-9 grid grid-cols-3 gap-4 border-t border-white/10 pt-5">
                 <div>
                   <p className="text-xs text-slate-400">Patients</p>
-                  <p className="mt-1 text-lg font-semibold">{summary.patients}</p>
+                  <p className="mt-1 text-2xl font-black sm:text-3xl" data-testid="patient-count">
+                    {summary.patients}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">Payments</p>
-                  <p className="mt-1 text-lg font-semibold">{summary.transactions}</p>
+                  <p className="mt-1 text-2xl font-black sm:text-3xl" data-testid="payment-count">
+                    {summary.transactions}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">Active departments</p>
-                  <p className="mt-1 text-lg font-semibold">
+                  <p
+                    className="mt-1 text-2xl font-black sm:text-3xl"
+                    data-testid="department-count"
+                  >
                     {departments.filter((department) => department.amount > 0).length}
                   </p>
                 </div>
@@ -671,7 +691,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="mb-5">
+        <div className="mb-5 grid gap-5 xl:grid-cols-[1.5fr_0.8fr]">
           <article className="panel p-5 sm:p-6">
             <div className="mb-6 flex items-center justify-between">
               <div>
@@ -686,14 +706,18 @@ function Dashboard() {
               </Button>
             </div>
             <div className="space-y-5">
-              {departments.map((department) => {
+              {sortedDepartments.map((department) => {
                 const share =
                   summary.revenue === 0
                     ? 0
                     : Math.round((department.amount / summary.revenue) * 100);
                 const width = `${Math.min(100, Math.max(department.amount > 0 ? 4 : 0, share))}%`;
                 return (
-                  <div key={department.name}>
+                  <div
+                    data-department-amount={department.amount}
+                    data-testid="department-performance-row"
+                    key={department.name}
+                  >
                     <div className="mb-2 flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2.5">
                         <span className={cn("department-dot", `department-${department.color}`)} />
@@ -719,6 +743,7 @@ function Dashboard() {
               })}
             </div>
           </article>
+          <PatientMixCard patientMix={patientMix} />
         </div>
 
         <article className="panel overflow-hidden">
@@ -990,5 +1015,73 @@ function Dashboard() {
         workspace={selectedPatient}
       />
     </AppShell>
+  );
+}
+
+const patientMixColors: Record<
+  DashboardData["patientMix"]["segments"][number]["label"],
+  { dot: string; value: string }
+> = {
+  New: { dot: "bg-emerald-500", value: "rgb(16 185 129)" },
+  Other: { dot: "bg-slate-400", value: "rgb(148 163 184)" },
+  "Post-op": { dot: "bg-violet-500", value: "rgb(139 92 246)" },
+  Revisit: { dot: "bg-blue-500", value: "rgb(59 130 246)" },
+};
+
+function PatientMixCard({ patientMix }: { patientMix: DashboardData["patientMix"] }) {
+  let accumulated = 0;
+  const stops = patientMix.segments.map((segment) => {
+    const start = patientMix.total === 0 ? 0 : (accumulated / patientMix.total) * 360;
+    accumulated += segment.count;
+    const end = patientMix.total === 0 ? 0 : (accumulated / patientMix.total) * 360;
+    return `${patientMixColors[segment.label].value} ${start}deg ${end}deg`;
+  });
+  const background =
+    patientMix.total === 0 ? "var(--track)" : `conic-gradient(${stops.join(", ")})`;
+
+  return (
+    <article className="panel p-5 sm:p-6">
+      <div>
+        <h2 className="panel-title">Patient mix</h2>
+        <p className="panel-subtitle">EMR visit types for the selected period</p>
+      </div>
+      <div className="mt-6 flex flex-col items-center gap-6 sm:flex-row xl:flex-col 2xl:flex-row">
+        <div
+          aria-label={patientMix.segments
+            .map((segment) => `${segment.label} ${segment.count}`)
+            .join(", ")}
+          className="grid size-40 shrink-0 place-items-center rounded-full"
+          role="img"
+          style={{ background }}
+        >
+          <div className="grid size-28 place-items-center rounded-full bg-[var(--panel)] text-center shadow-inner">
+            <div>
+              <p className="text-3xl font-black">{patientMix.total}</p>
+              <p className="text-[11px] font-semibold text-[var(--muted)]">appointments</p>
+            </div>
+          </div>
+        </div>
+        <div className="w-full space-y-3">
+          {patientMix.segments.map((segment) => {
+            const percentage =
+              patientMix.total === 0 ? 0 : Math.round((segment.count / patientMix.total) * 100);
+            return (
+              <div className="flex items-center justify-between gap-4" key={segment.label}>
+                <span className="flex items-center gap-2 text-sm font-semibold">
+                  <span
+                    className={cn("size-2.5 rounded-full", patientMixColors[segment.label].dot)}
+                  />
+                  {segment.label}
+                </span>
+                <span className="text-right">
+                  <b className="text-sm tabular-nums">{segment.count}</b>
+                  <span className="ml-2 text-xs text-[var(--muted)]">{percentage}%</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </article>
   );
 }

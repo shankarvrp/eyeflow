@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReconciliation } from "./revenue.server";
+import { buildPatientMix, buildReconciliation } from "./revenue.server";
 
 describe("collection reconciliation", () => {
   it("subtracts refunds and keeps manual collections separate", () => {
@@ -22,6 +22,28 @@ describe("collection reconciliation", () => {
       refundTotal: 80,
       reviewLines: 1,
       sourceLines: 3,
+    });
+  });
+});
+
+describe("patient visit mix", () => {
+  it("normalizes synchronized EMR visit types", () => {
+    expect(
+      buildPatientMix([
+        { visitType: "New" },
+        { visitType: "Re visit" },
+        { visitType: "revisit" },
+        { visitType: "Post OP" },
+        { visitType: null },
+      ]),
+    ).toEqual({
+      segments: [
+        { count: 1, label: "New" },
+        { count: 2, label: "Revisit" },
+        { count: 1, label: "Post-op" },
+        { count: 1, label: "Other" },
+      ],
+      total: 5,
     });
   });
 });

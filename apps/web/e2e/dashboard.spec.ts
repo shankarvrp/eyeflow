@@ -43,6 +43,27 @@ test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Add collection" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sync EMR" })).toBeVisible();
   await expect(page.getByLabel("Enable automatic EMR sync")).not.toBeChecked();
+  await expect(page.getByText("Collection period")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Patient mix" })).toBeVisible();
+  await expect(page.getByText("Action required: collection handover")).toBeVisible();
+  const departmentAmounts = await page
+    .getByTestId("department-performance-row")
+    .evaluateAll((rows) => rows.map((row) => Number(row.getAttribute("data-department-amount"))));
+  expect(departmentAmounts).toEqual([...departmentAmounts].sort((left, right) => right - left));
+  for (const testId of ["patient-count", "payment-count", "department-count"]) {
+    const fontSize = await page
+      .getByTestId(testId)
+      .evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+    expect(fontSize).toBeGreaterThanOrEqual(24);
+  }
+  await page.setViewportSize({ height: 900, width: 760 });
+  await expect(page.getByRole("textbox", { exact: true, name: "From" })).toBeVisible();
+  await expect(page.getByRole("textbox", { exact: true, name: "To" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Previous day" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Apply range" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
   await expect(page.getByText("Pending", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Daily target")).toHaveCount(0);
   const middayBadge = page.getByRole("button", {

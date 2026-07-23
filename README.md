@@ -133,6 +133,12 @@ kubectl apply -k infra/k8s/base
 
 Project Genesis establishes a tested, deployable foundation and a polished dashboard shell. The Add Collection workflow opens with OPD and Pharmacy as the primary departments; Investigation, OT, and Opticals can be added on demand. Every active department supports repeat payments in the same or different modes, and the complete patient collection is saved atomically with its collection date. Recent Collections and Patient-wise views include both EyeFlow and synchronized EMR receipts, are paginated, and open the same multi-department collection workflow for editing. Users may browse the current month and edit today's entries; administrators may browse extended history and enter or edit historical collections. Excel and PDF exports live in Reports with Today, This week, and This month scopes and contain the complete role-filtered result set rather than only the visible page. Administrators can enable a live dashboard connection to receive pushed collection updates without refreshing. Better Auth protects the dashboard and server functions, department access is stored per user, and every payment records its actor. The local FOSS EHR browser connector synchronizes a minimal patient/appointment catalog for the collection picker without storing EMR credentials; automatic synchronization is explicitly opt-in and can otherwise be run only from the Sync EMR button.
 
+The Overview combines large at-a-glance patient, payment, and department counts with an
+EMR-backed New/Revisit/Post-op patient mix. Department performance is ranked by collection value,
+the collection-period controls remain ordered at compact widths, and EMR synchronization sits beside
+Add Collection for quick access. Incomplete or mismatched mid-day/end-of-day handovers are highlighted
+as an action-required state until both the user and administrator sign-offs are complete.
+
 Revenue now provides an operational payment ledger and department contribution view. Patients is an
 exhaustive, searchable, paginated EMR and EyeFlow directory scoped to a selected date range and
 defaulted to today, with expandable visit and collection history. Reports includes date/department

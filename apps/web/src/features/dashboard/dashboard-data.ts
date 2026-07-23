@@ -58,6 +58,13 @@ export interface DashboardData {
     totalPatients: number;
   };
   patientCollections: PatientCollectionSummary[];
+  patientMix: {
+    segments: Array<{
+      count: number;
+      label: "New" | "Other" | "Post-op" | "Revisit";
+    }>;
+    total: number;
+  };
   recentCollections: RecentCollection[];
   reconciliation?: {
     importedGross: number;

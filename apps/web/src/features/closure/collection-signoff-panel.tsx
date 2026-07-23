@@ -132,6 +132,10 @@ export function CollectionSignoffPanel({
         return total + (approval?.calculatedNet ?? 0);
       }, 0) - summary.revenue,
     ) < 0.01;
+  const allHandoversComplete =
+    signoffs.periods.length === 4 &&
+    signoffs.periods.every((period) => Math.abs(period.declaredNet - period.calculatedNet) < 0.01);
+  const requiresHandoverAction = closure?.status !== "closed" && !allHandoversComplete;
 
   const activeSaved = signoffs.periods.find(
     (period) => period.period === activePeriod && period.signerRole === currentRole,
@@ -146,15 +150,45 @@ export function CollectionSignoffPanel({
 
   return (
     <>
-      <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className={cn(
+          "mb-5 flex flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+          requiresHandoverAction
+            ? "border-rose-500/40 bg-rose-500/[0.08] shadow-sm shadow-rose-500/10"
+            : "border-[var(--border)] bg-[var(--panel)]",
+        )}
+      >
         <div className="flex items-center gap-3">
-          <div className="metric-icon metric-icon-blue">
+          <div
+            className={cn(
+              "metric-icon",
+              requiresHandoverAction ? "metric-icon-rose" : "metric-icon-blue",
+            )}
+          >
             <Scale size={17} />
           </div>
           <div>
-            <p className="text-sm font-bold">Collection handover</p>
-            <p className="text-xs text-[var(--muted)]">
-              Open a status badge to reconcile and sign off.
+            <p
+              className={cn(
+                "text-sm font-black",
+                requiresHandoverAction && "text-rose-700 dark:text-rose-300",
+              )}
+            >
+              {requiresHandoverAction
+                ? "Action required: collection handover"
+                : "Collection handover complete"}
+            </p>
+            <p
+              className={cn(
+                "text-xs",
+                requiresHandoverAction
+                  ? "font-semibold text-rose-700/80 dark:text-rose-300/80"
+                  : "text-[var(--muted)]",
+              )}
+            >
+              {requiresHandoverAction
+                ? "Both user and admin must complete mid-day and end-of-day handovers."
+                : "All required declarations have been recorded."}
             </p>
           </div>
         </div>

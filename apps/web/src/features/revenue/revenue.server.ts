@@ -5,13 +5,14 @@ import {
   customers,
   dailyClosures,
   departments,
+  emrAppointments,
   emrPatients,
   emrReceipts,
   payments,
   revenueTargets,
   user,
 } from "@eyeflow/db/schema";
-import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, lte } from "drizzle-orm";
 import type {
   DashboardData,
   DepartmentSummary,
@@ -228,6 +229,15 @@ export async function readDashboardData(
     })
     .from(emrReceipts)
     .where(and(gte(emrReceipts.occurredAt, bounds.start), lt(emrReceipts.occurredAt, bounds.end)));
+  const appointmentRows = await db
+    .select({ visitType: emrAppointments.visitType })
+    .from(emrAppointments)
+    .where(
+      and(
+        gte(emrAppointments.appointmentDate, query.from),
+        lte(emrAppointments.appointmentDate, query.to),
+      ),
+    );
   const [closure] =
     query.from === query.to
       ? await db
@@ -386,6 +396,7 @@ export async function readDashboardData(
 
   const allPatientCollections = [...patientGroups.values()];
   const patientOffset = (query.patientPage - 1) * query.pageSize;
+  const patientMix = buildPatientMix(appointmentRows);
 
   return {
     ...(query.from === query.to
@@ -407,6 +418,7 @@ export async function readDashboardData(
       totalPatients: allPatientCollections.length,
     },
     patientCollections: allPatientCollections.slice(patientOffset, patientOffset + query.pageSize),
+    patientMix,
     recentCollections,
     reconciliation: buildReconciliation(reconciliationRows, persistedRows),
     ...(query.from === query.to
@@ -440,6 +452,31 @@ export async function readDashboardData(
           }
         : {}),
     },
+  };
+}
+
+export function buildPatientMix(
+  rows: Array<{ visitType: string | null }>,
+): DashboardData["patientMix"] {
+  const counts: Record<DashboardData["patientMix"]["segments"][number]["label"], number> = {
+    New: 0,
+    Other: 0,
+    "Post-op": 0,
+    Revisit: 0,
+  };
+  for (const row of rows) {
+    const normalized = row.visitType?.trim().toLowerCase();
+    if (normalized === "new") counts.New += 1;
+    else if (normalized === "re visit" || normalized === "revisit") counts.Revisit += 1;
+    else if (normalized === "post op" || normalized === "post-op") counts["Post-op"] += 1;
+    else counts.Other += 1;
+  }
+  return {
+    segments: (["New", "Revisit", "Post-op", "Other"] as const).map((label) => ({
+      count: counts[label],
+      label,
+    })),
+    total: rows.length,
   };
 }
 
