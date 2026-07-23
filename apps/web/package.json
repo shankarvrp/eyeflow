@@ -6,12 +6,12 @@
   "scripts": {
     "build": "vite build",
     "check": "biome check .",
-    "dev": "vite dev --port 3000",
+    "dev": "vite dev --host 127.0.0.1 --port 3000 --strictPort",
     "emr:login": "tsx scripts/emr-login.ts",
     "emr:sync": "tsx scripts/emr-sync.ts",
     "generate-routes": "tsr generate",
     "lint": "biome lint .",
-    "preview": "vite preview --port 3000",
+    "preview": "vite preview --host 127.0.0.1 --port 3000 --strictPort",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "typecheck": "tsr generate && tsc --noEmit"
