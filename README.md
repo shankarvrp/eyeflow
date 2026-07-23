@@ -145,5 +145,8 @@ defaulted to today, with expandable visit and collection history. Reports includ
 collections, cohort-based Pharmacy and Opticals conversion, accessible-department daily/weekly/monthly
 target meters, an administrator-only clinic-wide target pulse, and observed patient time from the
 scheduled EMR appointment to the patient's last receipt. Department targets are configured only by administrators.
-Audited role/department access management is active. Configurable payment/provider masters and a
-shared multi-instance event backplane are planned next.
+The Optical Tracker consolidates Opticals payments and unconverted mapped EMR receipts into one order
+per patient/day, including repeat advances. Staff with Opticals access can move orders through Walk-In,
+Advanced, Ordered, Lens Arrived, Fitted, and Delivered; every transition is persisted and audited, and
+the page summarizes the live workflow at a glance. Audited role/department access management is active.
+Configurable payment/provider masters and a shared multi-instance event backplane are planned next.

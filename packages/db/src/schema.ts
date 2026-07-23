@@ -16,6 +16,14 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const paymentKind = pgEnum("payment_kind", ["cash", "credit", "online"]);
+export const opticalOrderStatus = pgEnum("optical_order_status", [
+  "walk_in",
+  "advanced",
+  "ordered",
+  "lens_arrived",
+  "fitted",
+  "delivered",
+]);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -208,6 +216,20 @@ export const payments = pgTable(
   ],
 );
 
+export const opticalOrderStates = pgTable(
+  "optical_order_states",
+  {
+    orderKey: text("order_key").primaryKey(),
+    status: opticalOrderStatus("status").notNull().default("advanced"),
+    updatedByUserId: text("updated_by_user_id")
+      .notNull()
+      .references(() => user.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("optical_order_states_status_idx").on(table.status)],
+);
+
 export const dailyClosures = pgTable(
   "daily_closures",
   {
@@ -329,6 +351,7 @@ export const auditEvents = pgTable(
 export const userRelations = relations(user, ({ many }) => ({
   accounts: many(account),
   departmentAccess: many(userDepartmentAccess),
+  opticalOrderUpdates: many(opticalOrderStates),
   sessions: many(session),
 }));
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -367,6 +390,12 @@ export const paymentRelations = relations(payments, ({ one }) => ({
   emrReceipt: one(emrReceipts, {
     fields: [payments.emrReceiptId],
     references: [emrReceipts.id],
+  }),
+}));
+export const opticalOrderStateRelations = relations(opticalOrderStates, ({ one }) => ({
+  updatedBy: one(user, {
+    fields: [opticalOrderStates.updatedByUserId],
+    references: [user.id],
   }),
 }));
 export const userDepartmentAccessRelations = relations(userDepartmentAccess, ({ one }) => ({

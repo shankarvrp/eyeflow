@@ -182,6 +182,15 @@ test("adds collections for multiple departments in one save", async ({ page }) =
   const updatedPatientRow = page.getByRole("row").filter({ hasText: updatedPatientName });
   await expect(updatedPatientRow.getByText("4", { exact: true })).toBeVisible();
   await expect(updatedPatientRow.getByText("Opticals", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Optical Tracker" }).click();
+  await expect(page).toHaveURL("/optical-tracker");
+  await expect(page.getByRole("heading", { name: "Optical Tracker" })).toBeVisible();
+  const opticalOrderRow = page.getByRole("row").filter({ hasText: updatedPatientName });
+  const statusSelect = opticalOrderRow.getByLabel(new RegExp(`Status for ${updatedPatientName}`));
+  await statusSelect.selectOption("ordered");
+  await expect(statusSelect).toHaveValue("ordered");
+  await expect(opticalOrderRow.getByText(/Dr. Shankar/)).toBeVisible();
 });
 
 test("normal users see department targets in reports and can edit today's collections", async ({

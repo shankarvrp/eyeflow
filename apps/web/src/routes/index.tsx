@@ -407,6 +407,32 @@ function Dashboard() {
     });
   };
 
+  const selectFromDate = (from: string) => {
+    const to = from > draftTo ? from : draftTo;
+    setDraftFrom(from);
+    setDraftTo(to);
+    void loadDashboard({
+      ...query,
+      collectionPage: 1,
+      from,
+      patientPage: 1,
+      to,
+    });
+  };
+
+  const selectToDate = (to: string) => {
+    const from = to < draftFrom ? to : draftFrom;
+    setDraftFrom(from);
+    setDraftTo(to);
+    void loadDashboard({
+      ...query,
+      collectionPage: 1,
+      from,
+      patientPage: 1,
+      to,
+    });
+  };
+
   return (
     <AppShell user={loaderData.session.user}>
       <section className="animate-in">
@@ -414,8 +440,8 @@ function Dashboard() {
           <div>
             <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">{headingDate}</h1>
           </div>
-          <div className="flex flex-col gap-2 xl:items-end">
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+          <div className="flex w-full flex-col gap-2 xl:w-auto xl:items-end">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <section
                 aria-label="EMR synchronization"
                 className={cn(
@@ -486,7 +512,11 @@ function Dashboard() {
                   </label>
                 ) : null}
               </section>
-              <Button disabled={!ready} onClick={() => setAddCollectionOpen(true)}>
+              <Button
+                className="ml-auto bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20 hover:bg-cyan-400"
+                disabled={!ready}
+                onClick={() => setAddCollectionOpen(true)}
+              >
                 <Plus size={17} />
                 Add collection
               </Button>
@@ -520,9 +550,7 @@ function Dashboard() {
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-3">
             <div>
               <p className="text-sm font-bold">Collection period</p>
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                {query.from === query.to ? query.from : `${query.from} to ${query.to}`}
-              </p>
+              <p className="mt-1 text-xs text-[var(--muted)]">Viewing {headingDate}</p>
             </div>
             <label>
               <span className="form-label">Table size</span>
@@ -552,7 +580,7 @@ function Dashboard() {
                 className="form-control w-full"
                 max={initialDashboardQuery.to}
                 min={isAdmin ? undefined : `${initialDashboardQuery.to.slice(0, 7)}-01`}
-                onChange={(event) => setDraftFrom(event.target.value)}
+                onChange={(event) => selectFromDate(event.target.value)}
                 type="date"
                 value={draftFrom}
               />
@@ -563,7 +591,7 @@ function Dashboard() {
                 className="form-control w-full"
                 max={initialDashboardQuery.to}
                 min={isAdmin ? undefined : `${initialDashboardQuery.to.slice(0, 7)}-01`}
-                onChange={(event) => setDraftTo(event.target.value)}
+                onChange={(event) => selectToDate(event.target.value)}
                 type="date"
                 value={draftTo}
               />

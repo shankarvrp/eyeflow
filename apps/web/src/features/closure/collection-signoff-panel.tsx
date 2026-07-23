@@ -152,13 +152,13 @@ export function CollectionSignoffPanel({
     <>
       <div
         className={cn(
-          "mb-5 flex flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+          "mb-5 flex items-center gap-4 overflow-x-auto rounded-2xl border px-4 py-3",
           requiresHandoverAction
             ? "border-rose-500/40 bg-rose-500/[0.08] shadow-sm shadow-rose-500/10"
             : "border-[var(--border)] bg-[var(--panel)]",
         )}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <div
             className={cn(
               "metric-icon",
@@ -167,7 +167,7 @@ export function CollectionSignoffPanel({
           >
             <Scale size={17} />
           </div>
-          <div>
+          <div className="whitespace-nowrap">
             <p
               className={cn(
                 "text-sm font-black",
@@ -178,21 +178,9 @@ export function CollectionSignoffPanel({
                 ? "Action required: collection handover"
                 : "Collection handover complete"}
             </p>
-            <p
-              className={cn(
-                "text-xs",
-                requiresHandoverAction
-                  ? "font-semibold text-rose-700/80 dark:text-rose-300/80"
-                  : "text-[var(--muted)]",
-              )}
-            >
-              {requiresHandoverAction
-                ? "Both user and admin must complete mid-day and end-of-day handovers."
-                : "All required declarations have been recorded."}
-            </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {(["midday", "endofday"] as const).map((period) => (
             <HandoverBadge
               closureStatus={closure?.status}
@@ -458,28 +446,19 @@ function HandoverBadge({ closureStatus, onClick, period, saved }: HandoverBadgeP
   return (
     <button
       aria-label={`Open ${label} reconciliation: ${accessibleStatus}`}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-bold transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60",
-        isClosed || (userStatus === "complete" && adminStatus === "complete")
-          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          : userStatus === "mismatch" || adminStatus === "mismatch"
-            ? "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300"
-            : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-      )}
+      className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel)] px-2 py-1.5 text-xs font-bold transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
       onClick={onClick}
       type="button"
     >
+      <span>{label}</span>
       <span
         aria-hidden="true"
-        className="flex size-5 overflow-hidden rounded-full border border-current/20 bg-[var(--panel)]"
+        className="grid h-7 min-w-28 grid-cols-2 overflow-hidden rounded-lg border border-black/5 text-[10px] font-black text-white shadow-inner"
       >
-        <span className={cn("h-full w-1/2", statusColor(userStatus))} />
-        <span className={cn("h-full w-1/2", statusColor(adminStatus))} />
+        <span className={cn("grid place-items-center px-2", statusColor(userStatus))}>USER</span>
+        <span className={cn("grid place-items-center px-2", statusColor(adminStatus))}>ADMIN</span>
       </span>
-      <span>{label}</span>
-      <span className="font-medium opacity-75">
-        · {isClosed ? "Closed" : `${completedCount(userStatus, adminStatus)}/2`}
-      </span>
+      {isClosed ? <span className="text-emerald-600 dark:text-emerald-400">Closed</span> : null}
     </button>
   );
 }
@@ -495,10 +474,6 @@ function statusColor(status: ApprovalStatus) {
 function statusLabel(status: ApprovalStatus) {
   if (status === "complete") return "handed over";
   return status;
-}
-
-function completedCount(userStatus: ApprovalStatus, adminStatus: ApprovalStatus) {
-  return Number(userStatus === "complete") + Number(adminStatus === "complete");
 }
 
 function ReconciliationValue({ label, value }: { label: string; value: number }) {
