@@ -49,7 +49,7 @@ Patient and payment mutations will require an append-only audit event. Logs must
 
 The FOSS EHR connector is a local browser-automation boundary. Its persistent profile contains a
 sensitive authenticated session and must remain outside Git and container images. Synchronization
-uses stable EMR patient, appointment, and receipt identifiers, imports the minimum operational fields,
+uses stable EMR patient, appointment, receipt, and OT case identifiers, imports the minimum operational fields,
 and does not persist phone numbers, credentials, clinical content, or free-text receipt remarks.
 Receipt imports are immutable source records; department/payment mappings are reviewable drafts, and
 the final payment retains receipt provenance to enforce one-time use. Refunds and unknown source

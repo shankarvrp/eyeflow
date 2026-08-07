@@ -75,7 +75,7 @@ the login in the private browser window that EyeFlow opens. EyeFlow stores only 
 browser profile under `.eyeflow/`; it never requests or stores the EMR password.
 
 Once connected, any signed-in user can select **Sync EMR** for the active day. EyeFlow synchronizes
-both appointments and **Receipts → All Collection Receipts** at the interval configured by `EMR_SYNC_INTERVAL_MINUTES`
+appointments, **Receipts → All Collection Receipts**, and OT Scheduled/Discharged Today lists at the interval configured by `EMR_SYNC_INTERVAL_MINUTES`
 (15 minutes by default) while at least one authenticated dashboard is open. The terminal commands
 remain available as recovery and diagnostic tools, but they are not required for routine use.
 
@@ -149,4 +149,7 @@ The Optical Tracker consolidates Opticals payments and unconverted mapped EMR re
 per patient/day, including repeat advances. Staff with Opticals access can move orders through Walk-In,
 Advanced, Ordered, Lens Arrived, Fitted, and Delivered; every transition is persisted and audited, and
 the page summarizes the live workflow at a glance. Audited role/department access management is active.
+The OT Schedule synchronizes FOSS Scheduled and Discharged Today theatre cases, repeats the patient's
+OT receipt/payment breakdown, and lets authorized staff record audited surgery package values. A
+two-part user/administrator handover confirms the day's OT package collections independently.
 Configurable payment/provider masters and a shared multi-instance event backplane are planned next.

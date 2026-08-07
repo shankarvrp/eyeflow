@@ -3,8 +3,16 @@ import { createDatabase } from "@eyeflow/db";
 import { user } from "@eyeflow/db/schema";
 import { config } from "dotenv";
 import { eq } from "drizzle-orm";
-import { importEmrAppointments, importEmrReceipts } from "../src/features/emr/emr.server";
-import { scrapeEmrAppointments, scrapeEmrReceipts } from "../src/features/emr/emr-browser.server";
+import {
+  importEmrAppointments,
+  importEmrOtCases,
+  importEmrReceipts,
+} from "../src/features/emr/emr.server";
+import {
+  scrapeEmrAppointments,
+  scrapeEmrOtCases,
+  scrapeEmrReceipts,
+} from "../src/features/emr/emr-browser.server";
 import { clinicDateKey } from "./emr-config";
 
 config({ path: "../../.env", quiet: true });
@@ -29,8 +37,10 @@ const receipts = await scrapeEmrReceipts(requestedDate);
 await importEmrReceipts(receipts, administrator.id, requestedDate);
 const appointments = await scrapeEmrAppointments(requestedDate);
 await importEmrAppointments(appointments, administrator.id, requestedDate);
+const otCases = await scrapeEmrOtCases(requestedDate);
+await importEmrOtCases(otCases, administrator.id, requestedDate);
 
 stdout.write(
-  `Synchronized ${appointments.length} patient appointment${appointments.length === 1 ? "" : "s"} and ${receipts.length} collection receipt${receipts.length === 1 ? "" : "s"} for ${requestedDate}.\n`,
+  `Synchronized ${appointments.length} patient appointment${appointments.length === 1 ? "" : "s"}, ${receipts.length} collection receipt${receipts.length === 1 ? "" : "s"}, and ${otCases.length} OT case${otCases.length === 1 ? "" : "s"} for ${requestedDate}.\n`,
 );
 exit(0);

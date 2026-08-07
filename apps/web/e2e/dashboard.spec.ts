@@ -37,7 +37,14 @@ async function signIn(
 
 test("renders the EyeFlow dashboard shell", async ({ page }) => {
   await signIn(page);
-  await expect(page.getByRole("heading", { name: /July 2026/ })).toBeVisible();
+  const dashboardDate = new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "long",
+    timeZone: "Asia/Kolkata",
+    weekday: "long",
+    year: "numeric",
+  }).format(new Date());
+  await expect(page.getByRole("heading", { name: dashboardDate })).toBeVisible();
   await expect(page.getByText("Good morning, Dr. Shankar")).toHaveCount(0);
   await expect(page.getByText("Today's collection pulse")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add collection" })).toBeVisible();
@@ -134,6 +141,12 @@ test("revenue, patients, and reports modules are operational", async ({ page }) 
   const pdfDownload = page.waitForEvent("download");
   await page.getByRole("link", { name: "PDF" }).click();
   await expect((await pdfDownload).suggestedFilename()).toMatch(/\.pdf$/);
+
+  await page.getByRole("link", { name: "OT Schedule" }).click();
+  await expect(page).toHaveURL("/ot-schedule");
+  await expect(page.getByRole("heading", { name: "OT Schedule" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Surgery list" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "User ! Admin !" })).toBeVisible();
 });
 
 test("adds collections for multiple departments in one save", async ({ page }) => {

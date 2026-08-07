@@ -78,6 +78,13 @@
       "when": 1784831737010,
       "tag": "0010_regular_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786126971601,
+      "tag": "0011_careful_living_tribunal",
+      "breakpoints": true
     }
   ]
 }

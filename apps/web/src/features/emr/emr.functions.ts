@@ -4,6 +4,7 @@ import { isAdminRole, requireRevenuePermission } from "../auth/auth.server";
 import { isoDateSchema } from "../revenue/collection-query";
 import {
   importEmrAppointments,
+  importEmrOtCases,
   importEmrReceipts,
   readEmrPatientOptions,
   readEmrReceiptDrafts,
@@ -13,6 +14,7 @@ import {
   connectEmrBrowser,
   hasConnectedEmrSession,
   scrapeEmrAppointments,
+  scrapeEmrOtCases,
   scrapeEmrReceipts,
 } from "./emr-browser.server";
 
@@ -56,6 +58,8 @@ export const connectEmr = createServerFn({ method: "POST" })
     await importEmrReceipts(receipts, session.user.id, data.appointmentDate);
     const records = await scrapeEmrAppointments(data.appointmentDate);
     await importEmrAppointments(records, session.user.id, data.appointmentDate);
+    const otCases = await scrapeEmrOtCases(data.appointmentDate);
+    await importEmrOtCases(otCases, session.user.id, data.appointmentDate);
     return readEmrSyncStatus(data.appointmentDate, true);
   });
 
@@ -67,5 +71,7 @@ export const syncEmrNow = createServerFn({ method: "POST" })
     await importEmrReceipts(receipts, session.user.id, data.appointmentDate);
     const records = await scrapeEmrAppointments(data.appointmentDate);
     await importEmrAppointments(records, session.user.id, data.appointmentDate);
+    const otCases = await scrapeEmrOtCases(data.appointmentDate);
+    await importEmrOtCases(otCases, session.user.id, data.appointmentDate);
     return readEmrSyncStatus(data.appointmentDate, true);
   });

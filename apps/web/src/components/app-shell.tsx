@@ -7,6 +7,7 @@ import {
   CircleHelp,
   Command,
   Glasses,
+  Hospital,
   LayoutDashboard,
   Menu,
   ReceiptIndianRupee,
@@ -26,6 +27,7 @@ const navigation = [
   { label: "Revenue", icon: ReceiptIndianRupee, href: "/revenue" as const },
   { label: "Patients", icon: Users, href: "/patients" as const },
   { label: "Optical Tracker", icon: Glasses, href: "/optical-tracker" as const },
+  { label: "OT Schedule", icon: Hospital, href: "/ot-schedule" as const },
   { label: "Reports", icon: BarChart3, href: "/reports" as const },
 ];
 

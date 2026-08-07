@@ -1,6 +1,8 @@
 import { access, mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "playwright";
+import type { EmrOtCaseImport, OtCaseStatus } from "../operations/ot-schema";
+import { type OtTableSnapshot, parseOtTable } from "../operations/ot-scraper";
 import type { EmrAppointmentImport } from "./emr.server";
 import { type EmrReceiptImport, parseEmrReceiptPdf } from "./emr-receipt-parser";
 import {
@@ -40,6 +42,11 @@ function receiptsUrl(date: string): string {
   url.searchParams.set("date", date);
   url.searchParams.set("location", "All Collection");
   return url.toString();
+}
+
+function configuredOtUrl(): string | null {
+  const path = process.env.EMR_OT_PAGE_PATH?.trim();
+  return path ? new URL(path, baseUrl()).toString() : null;
 }
 
 function isAppointmentsUrl(url: string): boolean {
@@ -184,6 +191,195 @@ export async function scrapeEmrReceipts(date: string): Promise<EmrReceiptImport[
       await context.close();
     }
   });
+}
+
+export async function scrapeEmrOtCases(date: string): Promise<EmrOtCaseImport[]> {
+  return exclusiveBrowserOperation(async () => {
+    if (!(await hasConnectedEmrSession())) {
+      throw new Error("EMR connection required. Ask an administrator to connect the EMR.");
+    }
+    const { chromium } = await import("playwright");
+    const context = await chromium.launchPersistentContext(profileDirectory(), { headless: true });
+    const page = context.pages()[0] ?? (await context.newPage());
+    try {
+      await page.goto(appointmentsUrl(date), { waitUntil: "domcontentloaded" });
+      if (isLoginUrl(page.url())) {
+        await invalidateSessionMarker();
+        throw new Error("The EMR session expired. Ask an administrator to reconnect the EMR.");
+      }
+
+      const otUrl = configuredOtUrl() ?? (await discoverOtPageUrl(page));
+      await page.goto(otUrl, { waitUntil: "domcontentloaded" });
+      if (isLoginUrl(page.url())) {
+        await invalidateSessionMarker();
+        throw new Error("The EMR session expired. Ask an administrator to reconnect the EMR.");
+      }
+
+      await selectOtDepartment(page);
+      await setOtDate(page, date);
+      const records = new Map<string, EmrOtCaseImport>();
+      for (const status of ["scheduled", "discharged_today"] as const) {
+        await selectOtStatus(page, status);
+        const snapshot = await readOtTable(page);
+        const parsed = parseOtTable(snapshot, date, status);
+        for (const record of await enrichOtPatientIds(context, snapshot, parsed)) {
+          const existing = records.get(record.externalCaseId);
+          if (!existing || record.status === "discharged_today") {
+            records.set(record.externalCaseId, record);
+          }
+        }
+      }
+
+      await writeFile(sessionMarkerPath(), new Date().toISOString(), {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      return [...records.values()];
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+async function discoverOtPageUrl(page: Page): Promise<string> {
+  const candidates = await page.locator("a[href]").evaluateAll((elements) =>
+    elements.map((element) => ({
+      href: element.getAttribute("href") ?? "",
+      text: (element.textContent ?? "").replace(/\s+/g, " ").trim(),
+    })),
+  );
+  const scored = candidates
+    .map((candidate) => {
+      const haystack = `${candidate.text} ${candidate.href}`.toLocaleLowerCase();
+      let score = 0;
+      if (/\boperation\s*theatre\b|\bot\b/.test(haystack)) score += 100;
+      if (/surgery|theatre/.test(haystack)) score += 50;
+      if (/appointment_managements/.test(haystack)) score += 20;
+      if (!candidate.href || candidate.href.startsWith("#")) score = 0;
+      return { ...candidate, score };
+    })
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score);
+  const selected = scored[0];
+  if (!selected) {
+    throw new Error(
+      "The FOSS OT page could not be found. Set EMR_OT_PAGE_PATH if the navigation label has changed.",
+    );
+  }
+  return new URL(selected.href, baseUrl()).toString();
+}
+
+interface SelectDescription {
+  index: number;
+  options: Array<{ label: string; value: string }>;
+}
+
+async function describeSelects(page: Page): Promise<SelectDescription[]> {
+  return page.locator("select").evaluateAll((elements) =>
+    elements.map((element, index) => ({
+      index,
+      options: [...(element as HTMLSelectElement).options].map((option) => ({
+        label: (option.textContent ?? "").replace(/\s+/g, " ").trim(),
+        value: option.value,
+      })),
+    })),
+  );
+}
+
+async function selectOtDepartment(page: Page): Promise<void> {
+  const select = (await describeSelects(page)).find((description) =>
+    description.options.some((option) =>
+      /^(ot|operation theatre|operation theater)$/i.test(option.label),
+    ),
+  );
+  if (!select) return;
+  const option = select.options.find((candidate) =>
+    /^(ot|operation theatre|operation theater)$/i.test(candidate.label),
+  );
+  if (!option) return;
+  await page.locator("select").nth(select.index).selectOption(option.value);
+  await page.waitForTimeout(500);
+}
+
+async function setOtDate(page: Page, date: string): Promise<void> {
+  const controls = page.locator(
+    'input[type="date"][name*="date" i], input[type="date"][id*="date" i]',
+  );
+  if ((await controls.count()) === 0) return;
+  await controls.nth(0).fill(date);
+  await controls.nth(0).press("Enter");
+  await page.waitForTimeout(500);
+}
+
+async function selectOtStatus(page: Page, status: OtCaseStatus): Promise<void> {
+  const expectedLabel = status === "scheduled" ? "scheduled" : "discharged today";
+  const select = (await describeSelects(page)).find((description) =>
+    description.options.some((option) => option.label.toLocaleLowerCase() === expectedLabel),
+  );
+  if (!select) throw new Error(`The FOSS OT ${expectedLabel} filter is unavailable.`);
+  const option = select.options.find(
+    (candidate) => candidate.label.toLocaleLowerCase() === expectedLabel,
+  );
+  if (!option) throw new Error(`The FOSS OT ${expectedLabel} option is unavailable.`);
+  await page.locator("select").nth(select.index).selectOption(option.value);
+  await page.waitForTimeout(750);
+}
+
+async function readOtTable(page: Page): Promise<OtTableSnapshot> {
+  const tables = await page.locator("table").evaluateAll((elements) =>
+    elements.map((element) => ({
+      headers: [...element.querySelectorAll("thead th")].map((header) =>
+        (header.textContent ?? "").replace(/\s+/g, " ").trim(),
+      ),
+      rows: [...element.querySelectorAll("tbody tr")]
+        .filter((row) => (row as HTMLElement).offsetParent !== null)
+        .map((row) => ({
+          cells: [...row.querySelectorAll("td")].map((tableCell) =>
+            (tableCell.textContent ?? "").replace(/\s+/g, " ").trim(),
+          ),
+          href: row.querySelector("a[href]")?.getAttribute("href") ?? null,
+        })),
+    })),
+  );
+  const table = tables.find(
+    (candidate) =>
+      candidate.headers.some((header) => /patient|name/i.test(header)) &&
+      candidate.rows.some((row) => row.cells.length > 0),
+  );
+  return table ?? { headers: [], rows: [] };
+}
+
+async function enrichOtPatientIds(
+  context: import("playwright").BrowserContext,
+  snapshot: OtTableSnapshot,
+  records: EmrOtCaseImport[],
+): Promise<EmrOtCaseImport[]> {
+  if (snapshot.headers.some((header) => /patient\s*(id|no)|uhid|mr\s*no/i.test(header))) {
+    return records;
+  }
+  const detailPage = await context.newPage();
+  try {
+    const enriched: EmrOtCaseImport[] = [];
+    for (const [index, record] of records.entries()) {
+      const href = snapshot.rows[index]?.href;
+      if (!href) continue;
+      try {
+        await detailPage.goto(new URL(href, baseUrl()).toString(), {
+          timeout: 20_000,
+          waitUntil: "domcontentloaded",
+        });
+        const externalPatientId = parseExternalPatientId(
+          await detailPage.locator("body").innerText(),
+        );
+        if (externalPatientId) enriched.push({ ...record, externalPatientId });
+      } catch {
+        // One malformed case must not prevent the remaining OT list from syncing.
+      }
+    }
+    return enriched;
+  } finally {
+    await detailPage.close();
+  }
 }
 
 async function readVisibleAppointments(page: Page) {

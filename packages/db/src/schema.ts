@@ -230,6 +230,56 @@ export const opticalOrderStates = pgTable(
   (table) => [index("optical_order_states_status_idx").on(table.status)],
 );
 
+export const emrOtCases = pgTable(
+  "emr_ot_cases",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    source: text("source").notNull().default("foss"),
+    externalCaseId: text("external_case_id").notNull(),
+    emrPatientId: uuid("emr_patient_id")
+      .notNull()
+      .references(() => emrPatients.id, { onDelete: "cascade" }),
+    businessDate: date("business_date").notNull(),
+    status: text("status").notNull(),
+    procedureName: text("procedure_name"),
+    surgeonName: text("surgeon_name"),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+    packageAmount: numeric("package_amount", { precision: 12, scale: 2 }),
+    packageUpdatedByUserId: text("package_updated_by_user_id").references(() => user.id),
+    packageUpdatedAt: timestamp("package_updated_at", { withTimezone: true }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("emr_ot_cases_source_external_id_uidx").on(table.source, table.externalCaseId),
+    index("emr_ot_cases_date_idx").on(table.businessDate),
+    index("emr_ot_cases_patient_idx").on(table.emrPatientId),
+    index("emr_ot_cases_status_idx").on(table.status),
+  ],
+);
+
+export const otPackageSignoffs = pgTable(
+  "ot_package_signoffs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    businessDate: date("business_date").notNull(),
+    signerRole: text("signer_role").notNull(),
+    declaredAmount: numeric("declared_amount", { precision: 12, scale: 2 }).notNull(),
+    calculatedAmount: numeric("calculated_amount", { precision: 12, scale: 2 }).notNull(),
+    note: text("note").notNull(),
+    signedByUserId: text("signed_by_user_id")
+      .notNull()
+      .references(() => user.id),
+    signedAt: timestamp("signed_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("ot_package_signoffs_date_role_uidx").on(table.businessDate, table.signerRole),
+    index("ot_package_signoffs_date_idx").on(table.businessDate),
+  ],
+);
+
 export const dailyClosures = pgTable(
   "daily_closures",
   {
@@ -352,6 +402,7 @@ export const userRelations = relations(user, ({ many }) => ({
   accounts: many(account),
   departmentAccess: many(userDepartmentAccess),
   opticalOrderUpdates: many(opticalOrderStates),
+  otPackageSignoffs: many(otPackageSignoffs),
   sessions: many(session),
 }));
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -363,6 +414,7 @@ export const accountRelations = relations(account, ({ one }) => ({
 export const customerRelations = relations(customers, ({ many }) => ({ payments: many(payments) }));
 export const emrPatientRelations = relations(emrPatients, ({ many, one }) => ({
   appointments: many(emrAppointments),
+  otCases: many(emrOtCases),
   receipts: many(emrReceipts),
   customer: one(customers, { fields: [emrPatients.id], references: [customers.emrPatientId] }),
 }));
@@ -395,6 +447,22 @@ export const paymentRelations = relations(payments, ({ one }) => ({
 export const opticalOrderStateRelations = relations(opticalOrderStates, ({ one }) => ({
   updatedBy: one(user, {
     fields: [opticalOrderStates.updatedByUserId],
+    references: [user.id],
+  }),
+}));
+export const emrOtCaseRelations = relations(emrOtCases, ({ one }) => ({
+  packageUpdatedBy: one(user, {
+    fields: [emrOtCases.packageUpdatedByUserId],
+    references: [user.id],
+  }),
+  patient: one(emrPatients, {
+    fields: [emrOtCases.emrPatientId],
+    references: [emrPatients.id],
+  }),
+}));
+export const otPackageSignoffRelations = relations(otPackageSignoffs, ({ one }) => ({
+  signedBy: one(user, {
+    fields: [otPackageSignoffs.signedByUserId],
     references: [user.id],
   }),
 }));

@@ -3,11 +3,13 @@ import {
   auditEvents,
   customers,
   emrAppointments,
+  emrOtCases,
   emrPatients,
   emrReceipts,
   payments,
 } from "@eyeflow/db/schema";
 import { and, asc, count, countDistinct, eq, isNull, max } from "drizzle-orm";
+import type { EmrOtCaseImport } from "../operations/ot-schema";
 import { mapEmrReceipt } from "./emr-receipt-mapping";
 import type { EmrReceiptImport } from "./emr-receipt-parser";
 
@@ -43,6 +45,7 @@ export interface EmrSyncStatus {
   connected: boolean;
   lastSyncedAt: string | null;
   patientCount: number;
+  otCaseCount: number;
   receiptCount: number;
 }
 
@@ -205,12 +208,77 @@ export async function importEmrReceipts(
   return records.length;
 }
 
+export async function importEmrOtCases(
+  records: EmrOtCaseImport[],
+  actorUserId: string,
+  businessDate: string,
+): Promise<number> {
+  const db = getDatabase();
+  await db.transaction(async (transaction) => {
+    for (const record of records) {
+      const [patient] = await transaction
+        .insert(emrPatients)
+        .values({
+          displayName: record.patientName,
+          externalPatientId: record.externalPatientId,
+          source: "foss",
+        })
+        .onConflictDoUpdate({
+          target: [emrPatients.source, emrPatients.externalPatientId],
+          set: {
+            displayName: record.patientName,
+            lastSyncedAt: new Date(),
+            updatedAt: new Date(),
+          },
+        })
+        .returning({ id: emrPatients.id });
+      if (!patient) continue;
+
+      await transaction
+        .insert(emrOtCases)
+        .values({
+          businessDate: record.businessDate,
+          emrPatientId: patient.id,
+          externalCaseId: record.externalCaseId,
+          procedureName: record.procedureName,
+          scheduledAt: record.scheduledAt ? new Date(record.scheduledAt) : null,
+          source: "foss",
+          status: record.status,
+          surgeonName: record.surgeonName,
+        })
+        .onConflictDoUpdate({
+          target: [emrOtCases.source, emrOtCases.externalCaseId],
+          set: {
+            businessDate: record.businessDate,
+            emrPatientId: patient.id,
+            lastSyncedAt: new Date(),
+            procedureName: record.procedureName,
+            scheduledAt: record.scheduledAt ? new Date(record.scheduledAt) : null,
+            status: record.status,
+            surgeonName: record.surgeonName,
+            updatedAt: new Date(),
+          },
+        });
+    }
+    await transaction.insert(auditEvents).values({
+      action: "emr.ot.sync.completed",
+      actorUserId,
+      after: { businessDate, recordCount: records.length },
+      before: {},
+      entityId: businessDate,
+      entityType: "emr-ot-sync",
+      reason: "Authorized FOSS EHR OT schedule synchronization",
+    });
+  });
+  return records.length;
+}
+
 export async function readEmrSyncStatus(
   appointmentDate: string,
   connected: boolean,
 ): Promise<EmrSyncStatus> {
   const db = getDatabase();
-  const [[summary], [receiptSummary], [sync]] = await Promise.all([
+  const [[summary], [receiptSummary], [otSummary], [sync]] = await Promise.all([
     db
       .select({ patientCount: countDistinct(emrAppointments.emrPatientId) })
       .from(emrAppointments)
@@ -224,6 +292,10 @@ export async function readEmrSyncStatus(
       .select({ receiptCount: count() })
       .from(emrReceipts)
       .where(and(eq(emrReceipts.source, "foss"), eq(emrReceipts.receiptDate, appointmentDate))),
+    db
+      .select({ otCaseCount: count() })
+      .from(emrOtCases)
+      .where(and(eq(emrOtCases.source, "foss"), eq(emrOtCases.businessDate, appointmentDate))),
     db
       .select({ lastSyncedAt: max(auditEvents.createdAt) })
       .from(auditEvents)
@@ -241,6 +313,7 @@ export async function readEmrSyncStatus(
     autoSyncIntervalMinutes: emrAutoSyncIntervalMinutes(),
     connected,
     lastSyncedAt: sync?.lastSyncedAt?.toISOString() ?? null,
+    otCaseCount: Number(otSummary?.otCaseCount ?? 0),
     patientCount: Number(summary?.patientCount ?? 0),
     receiptCount: Number(receiptSummary?.receiptCount ?? 0),
   };

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as RevenueRouteImport } from './routes/revenue'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as PatientsRouteImport } from './routes/patients'
+import { Route as OtScheduleRouteImport } from './routes/ot-schedule'
 import { Route as OpticalTrackerRouteImport } from './routes/optical-tracker'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdministrationRouteImport } from './routes/administration'
@@ -34,6 +35,11 @@ const ReportsRoute = ReportsRouteImport.update({
 const PatientsRoute = PatientsRouteImport.update({
   id: '/patients',
   path: '/patients',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OtScheduleRoute = OtScheduleRouteImport.update({
+  id: '/ot-schedule',
+  path: '/ot-schedule',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OpticalTrackerRoute = OpticalTrackerRouteImport.update({
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/administration': typeof AdministrationRoute
   '/login': typeof LoginRoute
   '/optical-tracker': typeof OpticalTrackerRoute
+  '/ot-schedule': typeof OtScheduleRoute
   '/patients': typeof PatientsRoute
   '/reports': typeof ReportsRoute
   '/revenue': typeof RevenueRoute
@@ -95,6 +102,7 @@ export interface FileRoutesByTo {
   '/administration': typeof AdministrationRoute
   '/login': typeof LoginRoute
   '/optical-tracker': typeof OpticalTrackerRoute
+  '/ot-schedule': typeof OtScheduleRoute
   '/patients': typeof PatientsRoute
   '/reports': typeof ReportsRoute
   '/revenue': typeof RevenueRoute
@@ -109,6 +117,7 @@ export interface FileRoutesById {
   '/administration': typeof AdministrationRoute
   '/login': typeof LoginRoute
   '/optical-tracker': typeof OpticalTrackerRoute
+  '/ot-schedule': typeof OtScheduleRoute
   '/patients': typeof PatientsRoute
   '/reports': typeof ReportsRoute
   '/revenue': typeof RevenueRoute
@@ -124,6 +133,7 @@ export interface FileRouteTypes {
     | '/administration'
     | '/login'
     | '/optical-tracker'
+    | '/ot-schedule'
     | '/patients'
     | '/reports'
     | '/revenue'
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/administration'
     | '/login'
     | '/optical-tracker'
+    | '/ot-schedule'
     | '/patients'
     | '/reports'
     | '/revenue'
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/administration'
     | '/login'
     | '/optical-tracker'
+    | '/ot-schedule'
     | '/patients'
     | '/reports'
     | '/revenue'
@@ -164,6 +176,7 @@ export interface RootRouteChildren {
   AdministrationRoute: typeof AdministrationRoute
   LoginRoute: typeof LoginRoute
   OpticalTrackerRoute: typeof OpticalTrackerRoute
+  OtScheduleRoute: typeof OtScheduleRoute
   PatientsRoute: typeof PatientsRoute
   ReportsRoute: typeof ReportsRoute
   RevenueRoute: typeof RevenueRoute
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       path: '/patients'
       fullPath: '/patients'
       preLoaderRoute: typeof PatientsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ot-schedule': {
+      id: '/ot-schedule'
+      path: '/ot-schedule'
+      fullPath: '/ot-schedule'
+      preLoaderRoute: typeof OtScheduleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/optical-tracker': {
@@ -260,6 +280,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdministrationRoute: AdministrationRoute,
   LoginRoute: LoginRoute,
   OpticalTrackerRoute: OpticalTrackerRoute,
+  OtScheduleRoute: OtScheduleRoute,
   PatientsRoute: PatientsRoute,
   ReportsRoute: ReportsRoute,
   RevenueRoute: RevenueRoute,
