@@ -33,18 +33,26 @@ const today = currentDayReportQuery().from;
 
 export const Route = createFileRoute("/ot-schedule")({
   component: OtSchedule,
-  loader: async () => {
+  loaderDeps: ({ search }) => ({ businessDate: search.date }),
+  loader: async ({ deps }) => {
     const [ot, emrStatus] = await Promise.all([
-      getOtSchedule({ data: { businessDate: today } }),
-      getEmrSyncStatus({ data: { appointmentDate: today } }),
+      getOtSchedule({ data: { businessDate: deps.businessDate } }),
+      getEmrSyncStatus({ data: { appointmentDate: deps.businessDate } }),
     ]);
-    return { ...ot, emrStatus };
+    return { ...ot, businessDate: deps.businessDate, emrStatus };
   },
+  validateSearch: (search: Record<string, unknown>) => ({
+    date:
+      typeof search.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(search.date)
+        ? search.date
+        : today,
+  }),
 });
 
 function OtSchedule() {
   const loaderData = Route.useLoaderData();
-  const [businessDate, setBusinessDate] = useState(today);
+  const navigate = Route.useNavigate();
+  const [businessDate, setBusinessDate] = useState(loaderData.businessDate);
   const [schedule, setSchedule] = useState(loaderData.schedule);
   const [drafts, setDrafts] = useState<Record<string, string>>(() => packageDrafts(schedule));
   const [loading, setLoading] = useState(false);
@@ -66,6 +74,7 @@ function OtSchedule() {
       const result = await getOtSchedule({ data: { businessDate: date } });
       setBusinessDate(date);
       replaceSchedule(result.schedule);
+      await navigate({ replace: true, search: { date } });
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load the OT schedule.");
     } finally {

@@ -216,29 +216,43 @@ export async function importEmrOtCases(
   const db = getDatabase();
   await db.transaction(async (transaction) => {
     for (const record of records) {
-      const [patient] = await transaction
-        .insert(emrPatients)
-        .values({
-          displayName: record.patientName,
-          externalPatientId: record.externalPatientId,
-          source: "foss",
-        })
-        .onConflictDoUpdate({
-          target: [emrPatients.source, emrPatients.externalPatientId],
-          set: {
+      let patientId: string | undefined;
+      if (record.externalPatientId === record.externalCaseId) {
+        const matchingPatients = await transaction
+          .select({ id: emrPatients.id })
+          .from(emrPatients)
+          .where(
+            and(eq(emrPatients.source, "foss"), eq(emrPatients.displayName, record.patientName)),
+          )
+          .limit(2);
+        if (matchingPatients.length === 1) patientId = matchingPatients[0]?.id;
+      }
+      if (!patientId) {
+        const [patient] = await transaction
+          .insert(emrPatients)
+          .values({
             displayName: record.patientName,
-            lastSyncedAt: new Date(),
-            updatedAt: new Date(),
-          },
-        })
-        .returning({ id: emrPatients.id });
-      if (!patient) continue;
+            externalPatientId: record.externalPatientId,
+            source: "foss",
+          })
+          .onConflictDoUpdate({
+            target: [emrPatients.source, emrPatients.externalPatientId],
+            set: {
+              displayName: record.patientName,
+              lastSyncedAt: new Date(),
+              updatedAt: new Date(),
+            },
+          })
+          .returning({ id: emrPatients.id });
+        patientId = patient?.id;
+      }
+      if (!patientId) continue;
 
       await transaction
         .insert(emrOtCases)
         .values({
           businessDate: record.businessDate,
-          emrPatientId: patient.id,
+          emrPatientId: patientId,
           externalCaseId: record.externalCaseId,
           procedureName: record.procedureName,
           scheduledAt: record.scheduledAt ? new Date(record.scheduledAt) : null,
@@ -250,7 +264,7 @@ export async function importEmrOtCases(
           target: [emrOtCases.source, emrOtCases.externalCaseId],
           set: {
             businessDate: record.businessDate,
-            emrPatientId: patient.id,
+            emrPatientId: patientId,
             lastSyncedAt: new Date(),
             procedureName: record.procedureName,
             scheduledAt: record.scheduledAt ? new Date(record.scheduledAt) : null,

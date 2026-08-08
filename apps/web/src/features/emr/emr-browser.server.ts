@@ -202,25 +202,23 @@ export async function scrapeEmrOtCases(date: string): Promise<EmrOtCaseImport[]>
     const context = await chromium.launchPersistentContext(profileDirectory(), { headless: true });
     const page = context.pages()[0] ?? (await context.newPage());
     try {
-      await page.goto(appointmentsUrl(date), { waitUntil: "domcontentloaded" });
+      const otUrl =
+        configuredOtUrl() ?? new URL("/ipd/admission_managements", baseUrl()).toString();
+      const sourceUrl = new URL(otUrl);
+      sourceUrl.searchParams.set("current_date", date);
+      await page.goto(sourceUrl.toString(), { waitUntil: "domcontentloaded" });
       if (isLoginUrl(page.url())) {
         await invalidateSessionMarker();
         throw new Error("The EMR session expired. Ask an administrator to reconnect the EMR.");
       }
-
-      const otUrl = configuredOtUrl() ?? (await discoverOtPageUrl(page));
-      await page.goto(otUrl, { waitUntil: "domcontentloaded" });
-      if (isLoginUrl(page.url())) {
-        await invalidateSessionMarker();
-        throw new Error("The EMR session expired. Ask an administrator to reconnect the EMR.");
-      }
-
-      await selectOtDepartment(page);
-      await setOtDate(page, date);
+      await page.locator("#scheduled_admission_list").waitFor({
+        state: "attached",
+        timeout: 15_000,
+      });
+      await page.waitForTimeout(500);
       const records = new Map<string, EmrOtCaseImport>();
       for (const status of ["scheduled", "discharged_today"] as const) {
-        await selectOtStatus(page, status);
-        const snapshot = await readOtTable(page);
+        const snapshot = await readIpdOtList(page, status);
         const parsed = parseOtTable(snapshot, date, status);
         for (const record of await enrichOtPatientIds(context, snapshot, parsed)) {
           const existing = records.get(record.externalCaseId);
@@ -241,171 +239,27 @@ export async function scrapeEmrOtCases(date: string): Promise<EmrOtCaseImport[]>
   });
 }
 
-async function discoverOtPageUrl(page: Page): Promise<string> {
-  const candidates = await page.locator("a[href]").evaluateAll((elements) =>
-    elements.map((element) => ({
-      href: element.getAttribute("href") ?? "",
-      text: (element.textContent ?? "").replace(/\s+/g, " ").trim(),
-    })),
-  );
-  const scored = candidates
-    .map((candidate) => {
-      const haystack = `${candidate.text} ${candidate.href}`.toLocaleLowerCase();
-      let score = 0;
-      if (/\boperation\s*theatre\b|\bot\b/.test(haystack)) score += 100;
-      if (/surgery|theatre/.test(haystack)) score += 50;
-      if (/appointment_managements/.test(haystack)) score += 20;
-      if (!candidate.href || candidate.href.startsWith("#")) score = 0;
-      return { ...candidate, score };
-    })
-    .filter((candidate) => candidate.score > 0)
-    .sort((left, right) => right.score - left.score);
-  const selected = scored[0];
-  if (!selected) {
-    throw new Error(
-      "The FOSS OT page could not be found. Set EMR_OT_PAGE_PATH if the navigation label has changed.",
-    );
-  }
-  return new URL(selected.href, baseUrl()).toString();
-}
-
-interface SelectDescription {
-  index: number;
-  options: Array<{ label: string; value: string }>;
-}
-
-async function describeSelects(page: Page): Promise<SelectDescription[]> {
-  return page.locator("select").evaluateAll((elements) =>
-    elements.map((element, index) => ({
-      index,
-      options: [...(element as HTMLSelectElement).options].map((option) => ({
-        label: (option.textContent ?? "").replace(/\s+/g, " ").trim(),
-        value: option.value,
-      })),
-    })),
-  );
-}
-
-async function selectOtDepartment(page: Page): Promise<void> {
-  const select = (await describeSelects(page)).find((description) =>
-    description.options.some((option) =>
-      /^(ot|operation theatre|operation theater)$/i.test(option.label),
-    ),
-  );
-  if (!select) return;
-  const option = select.options.find((candidate) =>
-    /^(ot|operation theatre|operation theater)$/i.test(candidate.label),
-  );
-  if (!option) return;
-  await page.locator("select").nth(select.index).selectOption(option.value);
-  await page.waitForTimeout(500);
-}
-
-async function setOtDate(page: Page, date: string): Promise<void> {
-  const inlineDatePicker = page.locator("#ot-datepicker-inline");
-  if ((await inlineDatePicker.count()) === 1) {
-    await inlineDatePicker.evaluate((element, selectedDate) => {
-      const input = element as HTMLInputElement & {
-        _flatpickr?: {
-          setDate(value: string, triggerChange: boolean, format: string): void;
-        };
-      };
-      if (input._flatpickr) {
-        input._flatpickr.setDate(selectedDate, true, "Y-m-d");
-        return;
+async function readIpdOtList(page: Page, status: OtCaseStatus): Promise<OtTableSnapshot> {
+  const activeTab = status === "scheduled" ? "Scheduled" : "Discharged Today";
+  const rows = await page
+    .locator('a[href*="/ipd/admissions/"]')
+    .evaluateAll((elements, expectedTab) => {
+      const admissions = new Map<string, { cells: string[]; href: string | null }>();
+      for (const element of elements) {
+        const href = element.getAttribute("href");
+        if (!href) continue;
+        const url = new URL(href, window.location.origin);
+        if (url.searchParams.get("active_tab") !== expectedTab) continue;
+        const text = (element.textContent ?? "").replace(/\s+/g, " ").trim();
+        const renderedName = text.match(/^(.+?)\s+\d{1,3}y\b/i)?.[1]?.trim() ?? text;
+        const patientName = renderedName.replace(/\s+[MF]$/i, "").trim();
+        const externalCaseId = url.pathname.split("/").filter(Boolean).at(-1);
+        if (!patientName || !externalCaseId) continue;
+        admissions.set(externalCaseId, { cells: [patientName, text], href });
       }
-      input.value = selectedDate;
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    }, date);
-    await page.waitForTimeout(750);
-    return;
-  }
-
-  const controls = page.locator(
-    'input[type="date"][name*="date" i], input[type="date"][id*="date" i]',
-  );
-  if ((await controls.count()) === 0) return;
-  await controls.nth(0).fill(date);
-  await controls.nth(0).press("Enter");
-  await page.waitForTimeout(500);
-}
-
-async function selectOtStatus(page: Page, status: OtCaseStatus): Promise<void> {
-  const expectedLabel = status === "scheduled" ? "scheduled" : "discharged today";
-  const select = (await describeSelects(page)).find((description) =>
-    description.options.some((option) => option.label.toLocaleLowerCase() === expectedLabel),
-  );
-  if (select) {
-    const option = select.options.find(
-      (candidate) => candidate.label.toLocaleLowerCase() === expectedLabel,
-    );
-    if (!option) throw new Error(`The FOSS OT ${expectedLabel} option is unavailable.`);
-    await page.locator("select").nth(select.index).selectOption(option.value);
-    await page.waitForTimeout(750);
-    return;
-  }
-
-  // The current FOSS OT screen uses filter buttons rather than the older
-  // dropdown. A completed OT case is the page's equivalent of discharged today.
-  const target =
-    status === "scheduled" ? "scheduled_patients_list_menu" : "completed_patients_list_menu";
-  const filter = page.locator(`.hgFilterTab[data-target="${target}"]`);
-  if ((await filter.count()) !== 1) {
-    throw new Error(`The FOSS OT ${expectedLabel} filter is unavailable.`);
-  }
-  await filter.click();
-  await page.waitForTimeout(750);
-}
-
-async function readOtTable(page: Page): Promise<OtTableSnapshot> {
-  await expandOtTableRows(page);
-  const tables = await page.locator("table").evaluateAll((elements) =>
-    elements.map((element) => ({
-      headers: [...element.querySelectorAll("thead th")].map((header) =>
-        (header.textContent ?? "").replace(/\s+/g, " ").trim(),
-      ),
-      rows: [...element.querySelectorAll("tbody tr")]
-        .filter((row) => (row as HTMLElement).offsetParent !== null)
-        .map((row) => ({
-          cells: [...row.querySelectorAll("td")].map((tableCell) =>
-            (tableCell.textContent ?? "").replace(/\s+/g, " ").trim(),
-          ),
-          href: row.querySelector("a[href]")?.getAttribute("href") ?? null,
-        })),
-    })),
-  );
-  const table = tables.find((candidate) =>
-    candidate.headers.some((header) => /patient|name/i.test(header)),
-  );
-  if (!table) {
-    const emptyState = page.locator(
-      ".hgListSection.active .accordionNoDataCardUi, .hgListSection.active [id$='_list_no_data']",
-    );
-    const emptyStateCount = await emptyState.count();
-    for (let index = 0; index < emptyStateCount; index += 1) {
-      if (await emptyState.nth(index).isVisible()) return { headers: ["Patient"], rows: [] };
-    }
-  }
-  if (!table) {
-    throw new Error(
-      "The FOSS OT surgery table could not be found. The upstream page layout may have changed.",
-    );
-  }
-  return table;
-}
-
-async function expandOtTableRows(page: Page): Promise<void> {
-  const descriptions = await describeSelects(page);
-  const pageLength = descriptions.find(
-    (description) =>
-      description.options.some((option) => /^all$/i.test(option.label)) &&
-      description.options.filter((option) => /^\d+$/.test(option.label)).length >= 2,
-  );
-  if (!pageLength) return;
-  const all = pageLength.options.find((option) => /^all$/i.test(option.label));
-  if (!all) return;
-  await page.locator("select").nth(pageLength.index).selectOption(all.value);
-  await page.waitForTimeout(300);
+      return [...admissions.values()];
+    }, activeTab);
+  return { headers: ["Patient Name", "Scheduled Time"], rows };
 }
 
 async function enrichOtPatientIds(
@@ -421,7 +275,10 @@ async function enrichOtPatientIds(
     const enriched: EmrOtCaseImport[] = [];
     for (const [index, record] of records.entries()) {
       const href = snapshot.rows[index]?.href;
-      if (!href) continue;
+      if (!href) {
+        enriched.push(record);
+        continue;
+      }
       try {
         await detailPage.goto(new URL(href, baseUrl()).toString(), {
           timeout: 20_000,
@@ -430,9 +287,10 @@ async function enrichOtPatientIds(
         const externalPatientId = parseExternalPatientId(
           await detailPage.locator("body").innerText(),
         );
-        if (externalPatientId) enriched.push({ ...record, externalPatientId });
+        enriched.push(externalPatientId ? { ...record, externalPatientId } : record);
       } catch {
         // One malformed case must not prevent the remaining OT list from syncing.
+        enriched.push(record);
       }
     }
     return enriched;
