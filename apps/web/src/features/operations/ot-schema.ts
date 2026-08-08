@@ -45,12 +45,15 @@ export interface OtPaymentLine {
 
 export interface OtScheduleCase {
   businessDate: string;
+  cashAmount: number;
   collectedAmount: number;
+  creditAmount: number;
   externalPatientId: string;
   id: string;
   packageAmount: number | null;
   packageUpdatedAt: string | null;
   packageUpdatedBy: string | null;
+  onlineAmount: number;
   patientName: string;
   payments: OtPaymentLine[];
   procedureName: string | null;
@@ -73,8 +76,11 @@ export interface OtScheduleData {
   cases: OtScheduleCase[];
   signoffs: OtPackageSignoff[];
   summary: {
+    cashAmount: number;
     collectedAmount: number;
+    creditAmount: number;
     dischargedCount: number;
+    onlineAmount: number;
     packageAmount: number;
     scheduledCount: number;
     variance: number;

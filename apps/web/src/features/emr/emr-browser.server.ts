@@ -326,6 +326,7 @@ async function selectOtStatus(page: Page, status: OtCaseStatus): Promise<void> {
 }
 
 async function readOtTable(page: Page): Promise<OtTableSnapshot> {
+  await expandOtTableRows(page);
   const tables = await page.locator("table").evaluateAll((elements) =>
     elements.map((element) => ({
       headers: [...element.querySelectorAll("thead th")].map((header) =>
@@ -341,12 +342,29 @@ async function readOtTable(page: Page): Promise<OtTableSnapshot> {
         })),
     })),
   );
-  const table = tables.find(
-    (candidate) =>
-      candidate.headers.some((header) => /patient|name/i.test(header)) &&
-      candidate.rows.some((row) => row.cells.length > 0),
+  const table = tables.find((candidate) =>
+    candidate.headers.some((header) => /patient|name/i.test(header)),
   );
-  return table ?? { headers: [], rows: [] };
+  if (!table) {
+    throw new Error(
+      "The FOSS OT surgery table could not be found. The upstream page layout may have changed.",
+    );
+  }
+  return table;
+}
+
+async function expandOtTableRows(page: Page): Promise<void> {
+  const descriptions = await describeSelects(page);
+  const pageLength = descriptions.find(
+    (description) =>
+      description.options.some((option) => /^all$/i.test(option.label)) &&
+      description.options.filter((option) => /^\d+$/.test(option.label)).length >= 2,
+  );
+  if (!pageLength) return;
+  const all = pageLength.options.find((option) => /^all$/i.test(option.label));
+  if (!all) return;
+  await page.locator("select").nth(pageLength.index).selectOption(all.value);
+  await page.waitForTimeout(300);
 }
 
 async function enrichOtPatientIds(

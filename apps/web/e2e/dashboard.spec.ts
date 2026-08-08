@@ -147,6 +147,9 @@ test("revenue, patients, and reports modules are operational", async ({ page }) 
   await expect(page.getByRole("heading", { name: "OT Schedule" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Surgery list" })).toBeVisible();
   await expect(page.getByRole("button", { name: "User ! Admin !" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Cash" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Online" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Total" })).toBeVisible();
 });
 
 test("adds collections for multiple departments in one save", async ({ page }) => {

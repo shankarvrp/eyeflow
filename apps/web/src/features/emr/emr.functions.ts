@@ -1,6 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { isAdminRole, requireRevenuePermission } from "../auth/auth.server";
+import {
+  isAdminRole,
+  requireDepartmentPermission,
+  requireRevenuePermission,
+} from "../auth/auth.server";
 import { isoDateSchema } from "../revenue/collection-query";
 import {
   importEmrAppointments,
@@ -74,4 +78,30 @@ export const syncEmrNow = createServerFn({ method: "POST" })
     const otCases = await scrapeEmrOtCases(data.appointmentDate);
     await importEmrOtCases(otCases, session.user.id, data.appointmentDate);
     return readEmrSyncStatus(data.appointmentDate, true);
+  });
+
+export const connectEmrForOt = createServerFn({ method: "POST" })
+  .validator(emrPatientQuerySchema)
+  .handler(async ({ data }) => {
+    const session = await requireRevenuePermission("read");
+    if (!isAdminRole(session.user.role)) {
+      throw new Response("Only administrators can connect the EMR.", { status: 403 });
+    }
+    await connectEmrBrowser();
+    const records = await scrapeEmrOtCases(data.appointmentDate);
+    await importEmrOtCases(records, session.user.id, data.appointmentDate);
+    return readEmrSyncStatus(data.appointmentDate, true);
+  });
+
+export const syncEmrOtNow = createServerFn({ method: "POST" })
+  .validator(emrPatientQuerySchema)
+  .handler(async ({ data }) => {
+    const session = await requireRevenuePermission("read");
+    await requireDepartmentPermission(session.user.id, "OT", "view", session.user.role);
+    const records = await scrapeEmrOtCases(data.appointmentDate);
+    await importEmrOtCases(records, session.user.id, data.appointmentDate);
+    return {
+      recordCount: records.length,
+      status: await readEmrSyncStatus(data.appointmentDate, true),
+    };
   });

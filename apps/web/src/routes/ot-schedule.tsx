@@ -5,6 +5,7 @@ import {
   Check,
   CircleDollarSign,
   IndianRupee,
+  Link2,
   RefreshCw,
   Save,
   Scissors,
@@ -15,7 +16,7 @@ import {
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/app-shell";
 import { formatCurrency } from "../features/dashboard/dashboard-data";
-import { syncEmrNow } from "../features/emr/emr.functions";
+import { connectEmrForOt, getEmrSyncStatus, syncEmrOtNow } from "../features/emr/emr.functions";
 import { currentDayReportQuery } from "../features/operations/operations-schema";
 import {
   getOtSchedule,
@@ -32,7 +33,13 @@ const today = currentDayReportQuery().from;
 
 export const Route = createFileRoute("/ot-schedule")({
   component: OtSchedule,
-  loader: () => getOtSchedule({ data: { businessDate: today } }),
+  loader: async () => {
+    const [ot, emrStatus] = await Promise.all([
+      getOtSchedule({ data: { businessDate: today } }),
+      getEmrSyncStatus({ data: { appointmentDate: today } }),
+    ]);
+    return { ...ot, emrStatus };
+  },
 });
 
 function OtSchedule() {
@@ -44,6 +51,7 @@ function OtSchedule() {
   const [savingCase, setSavingCase] = useState<string>();
   const [error, setError] = useState<string>();
   const [signoffOpen, setSignoffOpen] = useState(false);
+  const [connected, setConnected] = useState(loaderData.emrStatus.connected);
   const isAdmin = loaderData.session.user.role?.split(",").includes("admin") ?? false;
 
   const replaceSchedule = (next: OtScheduleData) => {
@@ -69,12 +77,36 @@ function OtSchedule() {
     try {
       setLoading(true);
       setError(undefined);
-      await syncEmrNow({ data: { appointmentDate: businessDate } });
+      await syncEmrOtNow({ data: { appointmentDate: businessDate } });
+      setConnected(true);
       const result = await getOtSchedule({ data: { businessDate } });
       replaceSchedule(result.schedule);
     } catch (syncError) {
+      if (
+        syncError instanceof Error &&
+        /session|connection|required|reconnect/i.test(syncError.message)
+      ) {
+        setConnected(false);
+      }
       setError(
         syncError instanceof Error ? syncError.message : "Unable to synchronize the FOSS OT list.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const connect = async () => {
+    try {
+      setLoading(true);
+      setError(undefined);
+      await connectEmrForOt({ data: { appointmentDate: businessDate } });
+      setConnected(true);
+      const result = await getOtSchedule({ data: { businessDate } });
+      replaceSchedule(result.schedule);
+    } catch (connectError) {
+      setError(
+        connectError instanceof Error ? connectError.message : "Unable to connect the FOSS EMR.",
       );
     } finally {
       setLoading(false);
@@ -128,10 +160,20 @@ function OtSchedule() {
                 value={businessDate}
               />
             </label>
-            <Button disabled={loading} onClick={() => void synchronize()} variant="outline">
-              <RefreshCw className={loading ? "animate-spin" : undefined} size={16} />
-              {loading ? "Syncing…" : "Sync FOSS OT"}
-            </Button>
+            {!connected && isAdmin ? (
+              <Button disabled={loading} onClick={() => void connect()} variant="outline">
+                <Link2 size={16} /> {loading ? "Connecting…" : "Connect FOSS EHR"}
+              </Button>
+            ) : (
+              <Button
+                disabled={loading || !connected}
+                onClick={() => void synchronize()}
+                variant="outline"
+              >
+                <RefreshCw className={loading ? "animate-spin" : undefined} size={16} />
+                {loading ? "Syncing…" : "Sync FOSS OT"}
+              </Button>
+            )}
             <HandoverBadge onClick={() => setSignoffOpen(true)} signoffs={schedule.signoffs} />
           </div>
         </header>
@@ -145,7 +187,7 @@ function OtSchedule() {
           </p>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-7">
           <Metric icon={CalendarDays} label="Scheduled" value={schedule.summary.scheduledCount} />
           <Metric icon={Check} label="Discharged today" value={schedule.summary.dischargedCount} />
           <Metric
@@ -155,7 +197,18 @@ function OtSchedule() {
           />
           <Metric
             icon={CircleDollarSign}
-            label="OT collected"
+            label="Cash collection"
+            value={formatCurrency(schedule.summary.cashAmount)}
+          />
+          <Metric
+            icon={CircleDollarSign}
+            label="Online collection"
+            value={formatCurrency(schedule.summary.onlineAmount)}
+          />
+          <Metric
+            accent="success"
+            icon={CircleDollarSign}
+            label="Total collection"
             value={formatCurrency(schedule.summary.collectedAmount)}
           />
           <Metric
@@ -174,14 +227,16 @@ function OtSchedule() {
             </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-left text-sm">
+            <table className="w-full min-w-[1320px] text-left text-sm">
               <thead className="bg-[var(--subtle-panel)] text-xs text-[var(--muted)]">
                 <tr>
                   <th className="px-5 py-3.5 font-semibold">Patient</th>
                   <th className="px-5 py-3.5 font-semibold">Surgery</th>
                   <th className="px-5 py-3.5 font-semibold">Status</th>
                   <th className="px-5 py-3.5 font-semibold">Package amount</th>
-                  <th className="px-5 py-3.5 font-semibold">OT payments</th>
+                  <th className="px-5 py-3.5 text-right font-semibold">Cash</th>
+                  <th className="px-5 py-3.5 text-right font-semibold">Online</th>
+                  <th className="px-5 py-3.5 font-semibold">Total</th>
                   <th className="px-5 py-3.5 text-right font-semibold">Balance</th>
                 </tr>
               </thead>
@@ -251,6 +306,12 @@ function OtSchedule() {
                           : "Awaiting package value"}
                       </p>
                     </td>
+                    <td className="px-5 py-4 text-right font-bold tabular-nums">
+                      {formatCurrency(otCase.cashAmount)}
+                    </td>
+                    <td className="px-5 py-4 text-right font-bold tabular-nums">
+                      {formatCurrency(otCase.onlineAmount)}
+                    </td>
                     <td className="px-5 py-4">
                       <PaymentDetails otCase={otCase} />
                     </td>
@@ -270,7 +331,11 @@ function OtSchedule() {
                 <Stethoscope className="mx-auto text-orange-500" size={30} />
                 <p className="mt-3 font-bold">No OT cases synchronized for this date</p>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  Reconnect the EMR if needed, then use Sync FOSS OT.
+                  {connected
+                    ? "No Scheduled or Discharged Today cases were returned by FOSS for this date."
+                    : isAdmin
+                      ? "Connect FOSS EHR above, complete the login, and the OT list will synchronize."
+                      : "The EMR connection has expired. Ask an administrator to reconnect it."}
                 </p>
               </div>
             </div>
@@ -336,6 +401,11 @@ function PaymentDetails({ otCase }: { otCase: OtScheduleCase }) {
         {formatCurrency(otCase.collectedAmount)} · {otCase.payments.length} payment
         {otCase.payments.length === 1 ? "" : "s"}
       </summary>
+      {otCase.creditAmount > 0 ? (
+        <p className="mt-1 text-[10px] font-semibold text-[var(--muted)]">
+          Includes {formatCurrency(otCase.creditAmount)} credit
+        </p>
+      ) : null}
       <div className="mt-2 space-y-1.5">
         {otCase.payments.map((payment) => (
           <div

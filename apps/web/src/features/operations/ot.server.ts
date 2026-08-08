@@ -129,12 +129,27 @@ export async function readOtSchedule(businessDate: string): Promise<OtScheduleDa
     const paymentLines = paymentMap.get(row.patientId) ?? [];
     return {
       businessDate: row.businessDate,
+      cashAmount: money(
+        paymentLines
+          .filter((line) => line.kind === "cash")
+          .reduce((total, line) => total + line.amount, 0),
+      ),
       collectedAmount: money(paymentLines.reduce((total, line) => total + line.amount, 0)),
+      creditAmount: money(
+        paymentLines
+          .filter((line) => line.kind === "credit")
+          .reduce((total, line) => total + line.amount, 0),
+      ),
       externalPatientId: row.externalPatientId,
       id: row.id,
       packageAmount: row.packageAmount === null ? null : Number(row.packageAmount),
       packageUpdatedAt: row.packageUpdatedAt?.toISOString() ?? null,
       packageUpdatedBy: row.packageUpdatedBy ?? null,
+      onlineAmount: money(
+        paymentLines
+          .filter((line) => line.kind === "online")
+          .reduce((total, line) => total + line.amount, 0),
+      ),
       patientName: row.patientName,
       payments: paymentLines,
       procedureName: row.procedureName,
@@ -165,12 +180,28 @@ export async function readOtSchedule(businessDate: string): Promise<OtScheduleDa
   const collectedAmount = money(
     [...paymentMap.values()].flat().reduce((total, line) => total + line.amount, 0),
   );
+  const paymentLines = [...paymentMap.values()].flat();
   return {
     cases,
     signoffs,
     summary: {
+      cashAmount: money(
+        paymentLines
+          .filter((line) => line.kind === "cash")
+          .reduce((total, line) => total + line.amount, 0),
+      ),
       collectedAmount,
+      creditAmount: money(
+        paymentLines
+          .filter((line) => line.kind === "credit")
+          .reduce((total, line) => total + line.amount, 0),
+      ),
       dischargedCount: cases.filter((otCase) => otCase.status === "discharged_today").length,
+      onlineAmount: money(
+        paymentLines
+          .filter((line) => line.kind === "online")
+          .reduce((total, line) => total + line.amount, 0),
+      ),
       packageAmount,
       scheduledCount: cases.filter((otCase) => otCase.status === "scheduled").length,
       variance: money(packageAmount - collectedAmount),
