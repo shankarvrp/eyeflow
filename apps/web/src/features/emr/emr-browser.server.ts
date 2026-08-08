@@ -302,6 +302,25 @@ async function selectOtDepartment(page: Page): Promise<void> {
 }
 
 async function setOtDate(page: Page, date: string): Promise<void> {
+  const inlineDatePicker = page.locator("#ot-datepicker-inline");
+  if ((await inlineDatePicker.count()) === 1) {
+    await inlineDatePicker.evaluate((element, selectedDate) => {
+      const input = element as HTMLInputElement & {
+        _flatpickr?: {
+          setDate(value: string, triggerChange: boolean, format: string): void;
+        };
+      };
+      if (input._flatpickr) {
+        input._flatpickr.setDate(selectedDate, true, "Y-m-d");
+        return;
+      }
+      input.value = selectedDate;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }, date);
+    await page.waitForTimeout(750);
+    return;
+  }
+
   const controls = page.locator(
     'input[type="date"][name*="date" i], input[type="date"][id*="date" i]',
   );
@@ -316,12 +335,25 @@ async function selectOtStatus(page: Page, status: OtCaseStatus): Promise<void> {
   const select = (await describeSelects(page)).find((description) =>
     description.options.some((option) => option.label.toLocaleLowerCase() === expectedLabel),
   );
-  if (!select) throw new Error(`The FOSS OT ${expectedLabel} filter is unavailable.`);
-  const option = select.options.find(
-    (candidate) => candidate.label.toLocaleLowerCase() === expectedLabel,
-  );
-  if (!option) throw new Error(`The FOSS OT ${expectedLabel} option is unavailable.`);
-  await page.locator("select").nth(select.index).selectOption(option.value);
+  if (select) {
+    const option = select.options.find(
+      (candidate) => candidate.label.toLocaleLowerCase() === expectedLabel,
+    );
+    if (!option) throw new Error(`The FOSS OT ${expectedLabel} option is unavailable.`);
+    await page.locator("select").nth(select.index).selectOption(option.value);
+    await page.waitForTimeout(750);
+    return;
+  }
+
+  // The current FOSS OT screen uses filter buttons rather than the older
+  // dropdown. A completed OT case is the page's equivalent of discharged today.
+  const target =
+    status === "scheduled" ? "scheduled_patients_list_menu" : "completed_patients_list_menu";
+  const filter = page.locator(`.hgFilterTab[data-target="${target}"]`);
+  if ((await filter.count()) !== 1) {
+    throw new Error(`The FOSS OT ${expectedLabel} filter is unavailable.`);
+  }
+  await filter.click();
   await page.waitForTimeout(750);
 }
 
@@ -345,6 +377,15 @@ async function readOtTable(page: Page): Promise<OtTableSnapshot> {
   const table = tables.find((candidate) =>
     candidate.headers.some((header) => /patient|name/i.test(header)),
   );
+  if (!table) {
+    const emptyState = page.locator(
+      ".hgListSection.active .accordionNoDataCardUi, .hgListSection.active [id$='_list_no_data']",
+    );
+    const emptyStateCount = await emptyState.count();
+    for (let index = 0; index < emptyStateCount; index += 1) {
+      if (await emptyState.nth(index).isVisible()) return { headers: ["Patient"], rows: [] };
+    }
+  }
   if (!table) {
     throw new Error(
       "The FOSS OT surgery table could not be found. The upstream page layout may have changed.",
