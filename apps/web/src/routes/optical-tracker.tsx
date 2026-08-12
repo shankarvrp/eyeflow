@@ -1,15 +1,25 @@
 import { cn } from "@eyeflow/ui";
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, Glasses, IndianRupee, PackageCheck, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Glasses,
+  IndianRupee,
+  MessageCircle,
+  PackageCheck,
+  Search,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/app-shell";
 import { formatCurrency } from "../features/dashboard/dashboard-data";
 import { getOpticalTracker, setOpticalOrderStatus } from "../features/optical/optical.functions";
 import {
+  type OpticalOrder,
   type OpticalOrderStatus,
   opticalOrderStatuses,
   opticalOrderStatusLabels,
 } from "../features/optical/optical-schema";
+import { OpticalWhatsAppDialog } from "../features/optical/optical-whatsapp-dialog";
 
 export const Route = createFileRoute("/optical-tracker")({
   component: OpticalTracker,
@@ -22,21 +32,26 @@ const statusStyles: Record<OpticalOrderStatus, string> = {
   fitted: "border-teal-500/25 bg-teal-500/10 text-teal-700 dark:text-teal-300",
   lens_arrived: "border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300",
   ordered: "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-  walk_in: "border-slate-400/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+  ready: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
 };
+
+type OrderFilter = "all" | "overdue" | OpticalOrderStatus;
 
 function OpticalTracker() {
   const loaderData = Route.useLoaderData();
   const [tracker, setTracker] = useState(loaderData.tracker);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | OpticalOrderStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<OrderFilter>("all");
+  const [messageOrder, setMessageOrder] = useState<OpticalOrder>();
+  const [messageKind, setMessageKind] = useState<"overdue" | "ready">("ready");
   const [savingOrder, setSavingOrder] = useState<string>();
   const [error, setError] = useState<string>();
   const visibleOrders = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();
     return tracker.orders.filter(
       (order) =>
-        (statusFilter === "all" || order.status === statusFilter) &&
+        (statusFilter === "all" ||
+          (statusFilter === "overdue" ? order.isOverdue : order.status === statusFilter)) &&
         (term.length === 0 || order.patient.toLocaleLowerCase().includes(term)),
     );
   }, [search, statusFilter, tracker.orders]);
@@ -84,7 +99,23 @@ function OpticalTracker() {
           </div>
         </header>
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+          <button
+            aria-pressed={statusFilter === "overdue"}
+            className={cn(
+              "rounded-2xl border border-rose-500/25 bg-rose-500/10 p-4 text-left text-rose-700 transition hover:-translate-y-0.5 hover:shadow-sm dark:text-rose-300",
+              statusFilter === "overdue" && "ring-2 ring-current/25",
+            )}
+            onClick={() =>
+              setStatusFilter((current) => (current === "overdue" ? "all" : "overdue"))
+            }
+            type="button"
+          >
+            <p className="flex items-center gap-1.5 text-xs font-bold">
+              <AlertTriangle size={13} /> Overdue
+            </p>
+            <p className="mt-2 text-3xl font-black tabular-nums">{tracker.overdueCount}</p>
+          </button>
           {tracker.summary.map(({ count, status }) => (
             <button
               aria-pressed={statusFilter === status}
@@ -128,12 +159,11 @@ function OpticalTracker() {
               <select
                 aria-label="Filter optical orders by status"
                 className="form-control min-w-44"
-                onChange={(event) =>
-                  setStatusFilter(event.target.value as "all" | OpticalOrderStatus)
-                }
+                onChange={(event) => setStatusFilter(event.target.value as OrderFilter)}
                 value={statusFilter}
               >
                 <option value="all">All states</option>
+                <option value="overdue">Overdue</option>
                 {opticalOrderStatuses.map((status) => (
                   <option key={status} value={status}>
                     {opticalOrderStatusLabels[status]}
@@ -160,6 +190,7 @@ function OpticalTracker() {
                   <th className="px-5 py-3.5 text-right font-semibold">Collected</th>
                   <th className="px-5 py-3.5 font-semibold">Current state</th>
                   <th className="px-5 py-3.5 font-semibold">Last updated</th>
+                  <th className="px-5 py-3.5 font-semibold">Customer message</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
@@ -223,6 +254,28 @@ function OpticalTracker() {
                           ? `${formatTimestamp(order.updatedAt)} · ${order.updatedBy}`
                           : "Imported · not updated"}
                     </td>
+                    <td className="px-5 py-4">
+                      {order.isOverdue || order.status === "ready" ? (
+                        <button
+                          className={cn(
+                            "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition hover:-translate-y-0.5",
+                            order.isOverdue
+                              ? "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                              : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                          )}
+                          onClick={() => {
+                            setMessageKind(order.isOverdue ? "overdue" : "ready");
+                            setMessageOrder(order);
+                          }}
+                          type="button"
+                        >
+                          <MessageCircle size={15} />
+                          {order.isOverdue ? "Send delay update" : "Notify ready"}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-[var(--muted)]">Not required</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -240,6 +293,17 @@ function OpticalTracker() {
             </div>
           ) : null}
         </article>
+        {messageOrder ? (
+          <OpticalWhatsAppDialog
+            kind={messageKind}
+            onOpenChange={(open) => {
+              if (!open) setMessageOrder(undefined);
+            }}
+            onSaved={setTracker}
+            open
+            order={messageOrder}
+          />
+        ) : null}
       </section>
     </AppShell>
   );

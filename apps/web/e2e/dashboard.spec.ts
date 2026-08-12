@@ -143,7 +143,7 @@ test("revenue, patients, and reports modules are operational", async ({ page }) 
   await expect((await pdfDownload).suggestedFilename()).toMatch(/\.pdf$/);
 
   await page.getByRole("link", { name: "OT Schedule" }).click();
-  await expect(page).toHaveURL("/ot-schedule");
+  await expect(page).toHaveURL(/\/ot-schedule\?date=\d{4}-\d{2}-\d{2}$/);
   await expect(page.getByRole("heading", { name: "OT Schedule" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Surgery list" })).toBeVisible();
   await expect(page.getByRole("button", { name: "User ! Admin !" })).toBeVisible();
@@ -207,6 +207,12 @@ test("adds collections for multiple departments in one save", async ({ page }) =
   await statusSelect.selectOption("ordered");
   await expect(statusSelect).toHaveValue("ordered");
   await expect(opticalOrderRow.getByText(/Dr. Shankar/)).toBeVisible();
+  await statusSelect.selectOption("ready");
+  await expect(opticalOrderRow.getByRole("button", { name: "Notify ready" })).toBeVisible();
+  await opticalOrderRow.getByRole("button", { name: "Notify ready" }).click();
+  await expect(page.getByRole("dialog").getByText("Order ready message")).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(/ready for collection/)).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
 });
 
 test("normal users see department targets in reports and can edit today's collections", async ({

@@ -85,6 +85,13 @@
       "when": 1786126971601,
       "tag": "0011_careful_living_tribunal",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786557029947,
+      "tag": "0012_colorful_doctor_spectrum",
+      "breakpoints": true
     }
   ]
 }

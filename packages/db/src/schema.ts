@@ -22,6 +22,7 @@ export const opticalOrderStatus = pgEnum("optical_order_status", [
   "ordered",
   "lens_arrived",
   "fitted",
+  "ready",
   "delivered",
 ]);
 
@@ -221,6 +222,8 @@ export const opticalOrderStates = pgTable(
   {
     orderKey: text("order_key").primaryKey(),
     status: opticalOrderStatus("status").notNull().default("advanced"),
+    customerPhone: text("customer_phone"),
+    expectedDeliveryDate: date("expected_delivery_date"),
     updatedByUserId: text("updated_by_user_id")
       .notNull()
       .references(() => user.id),

@@ -16,6 +16,7 @@ import {
   type OpticalTrackerData,
   opticalOrderStatuses,
   type UpdateOpticalOrder,
+  type UpdateOpticalOrderContact,
 } from "./optical-schema";
 
 let database: ReturnType<typeof createDatabase> | undefined;
@@ -45,6 +46,21 @@ function paymentDate(date: Date) {
   const value = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
   return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function addDays(value: string, days: number) {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function currentBusinessDate() {
+  return paymentDate(new Date());
+}
+
+function normalizeStatus(status: (typeof opticalOrderStates.$inferSelect)["status"] | undefined) {
+  if (!status || status === "walk_in") return "advanced" satisfies OpticalOrderStatus;
+  return status;
 }
 
 function addOrder(
@@ -130,6 +146,8 @@ export async function readOpticalTracker(): Promise<OpticalTrackerData> {
     db
       .select({
         orderKey: opticalOrderStates.orderKey,
+        customerPhone: opticalOrderStates.customerPhone,
+        expectedDeliveryDate: opticalOrderStates.expectedDeliveryDate,
         status: opticalOrderStates.status,
         updatedAt: opticalOrderStates.updatedAt,
         updatedBy: user.name,
@@ -138,18 +156,25 @@ export async function readOpticalTracker(): Promise<OpticalTrackerData> {
       .innerJoin(user, eq(opticalOrderStates.updatedByUserId, user.id)),
   ]);
   const stateByKey = new Map(states.map((state) => [state.orderKey, state]));
+  const today = currentBusinessDate();
   const orders: OpticalOrder[] = sourceOrders.map((order) => {
     const state = stateByKey.get(order.orderKey);
+    const status = normalizeStatus(state?.status);
+    const expectedDeliveryDate = state?.expectedDeliveryDate ?? addDays(order.orderDate, 7);
     return {
       ...order,
       collectedAmount: Math.round((order.collectedAmount + Number.EPSILON) * 100) / 100,
-      status: state?.status ?? "advanced",
+      customerPhone: state?.customerPhone ?? null,
+      expectedDeliveryDate,
+      isOverdue: expectedDeliveryDate < today && status !== "ready" && status !== "delivered",
+      status,
       updatedAt: state?.updatedAt.toISOString() ?? null,
       updatedBy: state?.updatedBy ?? null,
     };
   });
   return {
     orders,
+    overdueCount: orders.filter((order) => order.isOverdue).length,
     summary: opticalOrderStatuses.map((status) => ({
       count: orders.filter((order) => order.status === status).length,
       status,
@@ -177,7 +202,7 @@ export async function updateOpticalOrderStatus(
     .from(opticalOrderStates)
     .where(eq(opticalOrderStates.orderKey, input.orderKey))
     .limit(1);
-  const previousStatus: OpticalOrderStatus = before?.status ?? "advanced";
+  const previousStatus = normalizeStatus(before?.status);
   if (previousStatus === input.status) return readOpticalTracker();
 
   const changedAt = new Date();
@@ -206,6 +231,65 @@ export async function updateOpticalOrderStatus(
       entityId: input.orderKey,
       entityType: "optical-order",
       reason: `Optical order moved from ${previousStatus} to ${input.status}.`,
+    });
+  });
+  return readOpticalTracker();
+}
+
+export async function updateOpticalOrderContact(
+  input: UpdateOpticalOrderContact,
+  actorUserId: string,
+): Promise<OpticalTrackerData> {
+  const db = getDatabase();
+  const sourceOrder = (await readOpticalSourceOrders()).find(
+    (order) => order.orderKey === input.orderKey,
+  );
+  if (!sourceOrder) throw new Error("This optical order no longer exists.");
+
+  const [before] = await db
+    .select({
+      customerPhone: opticalOrderStates.customerPhone,
+      expectedDeliveryDate: opticalOrderStates.expectedDeliveryDate,
+      status: opticalOrderStates.status,
+    })
+    .from(opticalOrderStates)
+    .where(eq(opticalOrderStates.orderKey, input.orderKey))
+    .limit(1);
+  const changedAt = new Date();
+  const after = {
+    customerPhone: input.customerPhone,
+    expectedDeliveryDate: input.expectedDeliveryDate ?? before?.expectedDeliveryDate ?? null,
+  };
+
+  await db.transaction(async (transaction) => {
+    await transaction
+      .insert(opticalOrderStates)
+      .values({
+        ...after,
+        orderKey: input.orderKey,
+        status: normalizeStatus(before?.status),
+        updatedAt: changedAt,
+        updatedByUserId: actorUserId,
+      })
+      .onConflictDoUpdate({
+        set: {
+          ...after,
+          updatedAt: changedAt,
+          updatedByUserId: actorUserId,
+        },
+        target: opticalOrderStates.orderKey,
+      });
+    await transaction.insert(auditEvents).values({
+      action: "optical-order.contact-updated",
+      actorUserId,
+      after,
+      before: {
+        customerPhone: before?.customerPhone ?? null,
+        expectedDeliveryDate: before?.expectedDeliveryDate ?? null,
+      },
+      entityId: input.orderKey,
+      entityType: "optical-order",
+      reason: "Optical order WhatsApp contact details updated.",
     });
   });
   return readOpticalTracker();
